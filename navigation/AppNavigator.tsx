@@ -1,8 +1,9 @@
 // navigation/AppNavigator.tsx
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
-import ReportFormScreen from '../screens/ReportFormScreen';
+//import ReportFormScreen from '../screens/ReportFormScreen';
 import SuccessScreen from '../screens/SuccessScreen';
+import ReportIssueScreen from '../screens/ReportIssueScreen';
 
 // Define the type for the screen parameters, if any. For now, it's undefined.
 export type RootStackParamList = {
@@ -17,7 +18,7 @@ export default function AppNavigator() {
     <Stack.Navigator initialRouteName="ReportForm">
       <Stack.Screen
         name="ReportForm"
-        component={ReportFormScreen}
+        component={ReportIssueScreen}
         options={{ title: 'File a New Report' }}
       />
       <Stack.Screen
