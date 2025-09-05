@@ -1,12 +1,9 @@
-// screens/LoginScreen.tsx
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { API_URL } from '../config/apiConfig'; // We will create this file next
-
-// NOTE: We will create a helper function for this later
+import { API_URL } from '../config/apiConfig';
 import * as SecureStore from 'expo-secure-store';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
@@ -21,6 +18,7 @@ export default function LoginScreen() {
       Alert.alert("Error", "Please enter both email and password.");
       return;
     }
+
     try {
       const response = await fetch(`${API_URL}/api/users/login`, {
         method: 'POST',
@@ -29,21 +27,17 @@ export default function LoginScreen() {
       });
 
       if (!response.ok) {
-        throw new Error("Invalid email or password.");
+        const errText = await response.text();
+        throw new Error(errText || "Invalid email or password.");
       }
 
       const { token } = await response.json();
-      
-      // Save the token securely
       await SecureStore.setItemAsync('user_token', token);
 
-      // Navigate to the main app (Home screen)
-      // We use reset to prevent the user from going "back" to the login screen
       navigation.reset({
         index: 0,
         routes: [{ name: 'Home' }],
       });
-
     } catch (error: any) {
       Alert.alert("Login Failed", error.message);
     }
@@ -51,10 +45,13 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Welcome Back</Text>
+      <Text style={styles.title}>Welcome Back 👋</Text>
+      <Text style={styles.subtitle}>Login to continue</Text>
+
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor="#999"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -63,21 +60,78 @@ export default function LoginScreen() {
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor="#999"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
-      <Button title="Login" onPress={handleLogin} />
-      <Button
-        title="Don't have an account? Sign Up"
-        onPress={() => navigation.navigate('Register')}
-      />
+
+      <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+        <Text style={styles.loginButtonText}>Login</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+        <Text style={styles.linkText}>Don't have an account? <Text style={styles.linkHighlight}>Sign Up</Text></Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, justifyContent: 'center', padding: 20 },
-    title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
-    input: { height: 40, borderColor: 'gray', borderWidth: 1, marginBottom: 12, paddingHorizontal: 10 },
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 25,
+    backgroundColor: '#f9f9f9',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 5,
+    color: '#333',
+  },
+  subtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 30,
+    color: '#666',
+  },
+  input: {
+    height: 50,
+    borderColor: '#ddd',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    marginBottom: 15,
+    backgroundColor: '#fff',
+    fontSize: 16,
+    color: '#333',
+  },
+  loginButton: {
+    backgroundColor: '#007bff',
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  loginButtonText: {
+    textAlign: 'center',
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  linkText: {
+    textAlign: 'center',
+    color: '#666',
+    fontSize: 15,
+  },
+  linkHighlight: {
+    color: '#007bff',
+    fontWeight: '600',
+  },
 });
