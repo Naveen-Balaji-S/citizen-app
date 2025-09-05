@@ -15,12 +15,19 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import MapView, { Marker, MapPressEvent } from "react-native-maps";
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from "../navigation/AppNavigator";
+import * as SecureStore from 'expo-secure-store'; // Import SecureStore
+import { API_URL } from "../config/apiConfig"; 
 
 // Types
 interface LocationType {
   latitude: number;
   longitude: number;
 }
+
+type ReportIssueScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ReportForm'>;
 
 export default function ReportIssueScreen() {
   const [image, setImage] = useState<string | null>(null);
@@ -29,6 +36,9 @@ export default function ReportIssueScreen() {
   const [description, setDescription] = useState<string>("");
 
   const [mapVisible, setMapVisible] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const navigation = useNavigation<ReportIssueScreenNavigationProp>();
 
   // Pick image
   const pickImage = async () => {
@@ -87,24 +97,65 @@ export default function ReportIssueScreen() {
     setImage(null);
   };
 
-  // Submit form
-  const submitReport = () => {
-    if (!image || !department || !location || !description.trim()) {
-      Alert.alert("Missing Info", "Please complete all fields.");
-      return;
+// Submit form
+const submitReport = async () => {
+  if (!image || !department || !location || !description.trim()) {
+    Alert.alert("Missing Info", "Please complete all fields.");
+    return;
+  }
+
+  setIsSubmitting(true);
+
+  try {
+    // 2. Create a FormData object. This is our "digital package".
+    const formData = new FormData();
+
+    // 3. Add all the text details to the package.
+    formData.append('department', department);
+    formData.append('description', description);
+    formData.append('latitude', location.latitude.toString());
+    formData.append('longitude', location.longitude.toString());
+
+    // 4. Add the image file to the package.
+    // 'report_image' is the key the server will look for.
+    formData.append('report_image', {
+      uri: image,
+      name: `photo_${Date.now()}.jpg`, // Create a unique name
+      type: `image/jpeg`,
+    } as any); 
+    
+    const token = await SecureStore.getItemAsync('user_token');
+      if (!token) {
+        throw new Error("You are not logged in.");
+      }
+
+    const response = await fetch(`${API_URL}/api/reports`, {
+      method: 'POST',
+      body: formData,
+      // This header is essential! It tells the server to expect files.
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        // We will add the login token here in a later step
+      },
+    });
+    // 6. Handle the server's response.
+    if (!response.ok) {
+      // If the server sent back an error, show it.
+      const errorData = await response.json();
+      throw new Error(errorData.error || "An unknown server error occurred.");
     }
+    
+    // If successful, go to the Success screen.
+    navigation.navigate('Success');
 
-    const reportData = {
-      image,
-      department,
-      location,
-      description,
-      timestamp: new Date().toISOString(),
-    };
-
-    console.log("Report submitted:", reportData);
-    Alert.alert("✅ Success", "Your issue has been reported!");
-  };
+  } catch (error: any) {
+    console.error("Submission Error:", error);
+    Alert.alert("Submission Error", error.message);
+  } finally {
+    // 7. Re-enable the submit button.
+    setIsSubmitting(false);
+  }
+};
 
   return (
     <ScrollView contentContainerStyle={styles.scrollContainer}>
@@ -187,8 +238,14 @@ export default function ReportIssueScreen() {
         </View>
 
         {/* Submit */}
-        <TouchableOpacity style={styles.submitBtn} onPress={submitReport}>
-          <Text style={styles.submitText}>Submit Report</Text>
+        <TouchableOpacity
+          style={[styles.submitBtn, isSubmitting && styles.disabledBtn]} // Adds a disabled style
+          onPress={submitReport}
+          disabled={isSubmitting} // Disables the button when submitting
+        >
+          <Text style={styles.submitText}>
+            {isSubmitting ? 'Submitting...' : 'Submit Report'} 
+          </Text>
         </TouchableOpacity>
 
         {/* Map Modal */}
@@ -274,4 +331,8 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   submitText: { color: "#fff", fontSize: 18, textAlign: "center", fontWeight: "bold" },
+
+  disabledBtn: {
+    backgroundColor: '#9fdaab', // A lighter green color
+  },
 });
