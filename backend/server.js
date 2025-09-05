@@ -18,11 +18,7 @@ app.use(express.json());
 
 // --- PostgreSQL Database Connection ---
 const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_DATABASE,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
+  connectionString: process.env.DATABASE_URL,
 });
 
 // --- Cloudinary Configuration ---
@@ -115,71 +111,45 @@ app.post('/api/users/login', async (req, res) => {
 
 // This sets up a "listener" at the address '/api/reports' for POST requests
 // upload.single('report_image') is the middleware that intercepts the image file.
-app.post('/api/reports', upload.single('report_image'), async (req, res) => {
+app.post('/api/reports', authenticateToken, upload.single('report_image'), async (req, res) => {
   try {
-    // 1. Get the text data sent from your app
-    const { department, description, latitude, longitude, userId } = req.body;
-    
-    // 2. Check if an image file was included in the request
-    if (!req.file) {
-      return res.status(400).json({ error: 'Image is required.' });
-    }
+    const { department, description, latitude, longitude } = req.body;
+    const userId = req.user.user_id; // Get user ID from the token
 
-    // 3. Upload the image from the server's memory (req.file.buffer) to Cloudinary
+    if (!req.file) return res.status(400).json({ error: 'Image is required.' });
+
     const uploadResult = await new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-          { folder: "civic_reports" }, // Optional: Puts all uploads into a specific folder in Cloudinary
-          (error, result) => {
+        const uploadStream = cloudinary.uploader.upload_stream({ folder: "civic_reports" }, (error, result) => {
             if (error) reject(error);
             else resolve(result);
-          }
-        );
+        });
         uploadStream.end(req.file.buffer);
     });
 
-    // 4. Get the secure image URL from the Cloudinary result
     const imageUrl = uploadResult.secure_url;
-    if (!imageUrl) {
-        throw new Error('Cloudinary upload failed');
-    }
+    if (!imageUrl) throw new Error('Cloudinary upload failed');
 
-    // 5. Save the final report data into your 'reports' table in PostgreSQL
     const newReport = await pool.query(
-      `INSERT INTO reports (user_id, department, description, latitude, longitude, image_url) 
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      `INSERT INTO reports (user_id, department, description, latitude, longitude, image_url) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [userId, department, description, latitude, longitude, imageUrl]
     );
 
-    // 6. Send a success message back to your app
-    res.status(201).json({ 
-        message: 'Report submitted successfully!', 
-        report: newReport.rows[0] 
-    });
-
+    res.status(201).json({ message: 'Report submitted successfully!', report: newReport.rows[0] });
   } catch (err) {
-    // If any part of the process fails, this block runs
     console.error('Error submitting report:', err.message);
     res.status(500).send('Server Error: Could not submit report.');
   }
 });
 
-// This sets up a "listener" at the address '/api/reports' for GET requests
-app.get('/api/reports', async (req, res) => {
+// CORRECT, SECURE ROUTE FOR FETCHING REPORTS
+app.get('/api/reports', authenticateToken, async (req, res) => {
     try {
-        // 1. For now, we will mock the user ID, just like in the app.
-        // Later, this ID will come from a secure login token.
-        const userId = '4'; 
-
-        // 2. Query the database to find all reports where the user_id matches.
-        // We also order them by the newest ones first.
+        const userId = req.user.user_id; // Get user ID from the token
         const userReports = await pool.query(
             "SELECT * FROM reports WHERE user_id = $1 ORDER BY created_at DESC", 
             [userId]
         );
-
-        // 3. Send the list of reports found (userReports.rows) back to the app as JSON.
         res.json(userReports.rows);
-
     } catch (err) {
         console.error("Error fetching reports:", err.message);
         res.status(500).send("Server Error");

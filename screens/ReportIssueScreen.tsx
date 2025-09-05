@@ -136,6 +136,7 @@ const submitReport = async () => {
       headers: {
         'Content-Type': 'multipart/form-data',
         // We will add the login token here in a later step
+        'Authorization': `Bearer ${token}`
       },
     });
     // 6. Handle the server's response.
