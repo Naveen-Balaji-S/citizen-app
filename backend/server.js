@@ -115,7 +115,7 @@ app.post('/api/reports', authenticateToken, upload.single('report_image'), async
   try {
     const { department, description, latitude, longitude } = req.body;
     const userId = req.user.user_id; // Get user ID from the token
-
+    
     if (!req.file) return res.status(400).json({ error: 'Image is required.' });
 
     const uploadResult = await new Promise((resolve, reject) => {

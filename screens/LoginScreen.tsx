@@ -1,13 +1,9 @@
-// screens/LoginScreen.tsx
-import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
+import React,{ useState } from 'react';
+import { View, Text, TextInput, Button, StyleSheet, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { API_URL } from '../config/apiConfig'; // We will create this file next
-
-// NOTE: We will create a helper function for this later
-import * as SecureStore from 'expo-secure-store';
+import { supabase } from '../lib/supabaseClient'; // Import the Supabase client
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -15,39 +11,66 @@ export default function LoginScreen() {
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async () => {
+  // Handles traditional email and password sign-in
+    const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please enter both email and password.");
       return;
     }
+    setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/users/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
       });
 
-      if (!response.ok) {
-        throw new Error("Invalid email or password.");
+      navigation.navigate('Home');
+
+      if (error) {
+        throw new Error(error.message || "Invalid email or password.");
       }
-
-      const { token } = await response.json();
-      
-      // Save the token securely
-      await SecureStore.setItemAsync('user_token', token);
-
-      // Navigate to the main app (Home screen)
-      // We use reset to prevent the user from going "back" to the login screen
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Home' }],
-      });
-
+      // On success, the AuthProvider will handle navigation.
     } catch (error: any) {
       Alert.alert("Login Failed", error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  // Handles Google OAuth sign-in
+  async function signInWithGoogle() {
+    setIsLoading(true);
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+    });
+
+    if (error) {
+      Alert.alert('Authentication Error', error.message);
+      setIsLoading(false);
+    }
+  }
+
+  // Handles the password reset flow
+  async function handlePasswordReset() {
+    if (!email) {
+        Alert.alert("Error", "Please enter your email address in the email field to reset your password.");
+        return;
+    }
+    setIsLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'yourapp://login' // Optional: A deep link to return the user to your app
+    });
+
+    if (error) {
+        Alert.alert("Error", error.message);
+    } else {
+        Alert.alert("Success", "A password reset link has been sent to your email address.");
+    }
+    setIsLoading(false);
+  }
+
 
   return (
     <View style={styles.container}>
@@ -59,6 +82,7 @@ export default function LoginScreen() {
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
+        editable={!isLoading}
       />
       <TextInput
         style={styles.input}
@@ -66,18 +90,86 @@ export default function LoginScreen() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        editable={!isLoading}
       />
-      <Button title="Login" onPress={handleLogin} />
-      <Button
-        title="Don't have an account? Sign Up"
-        onPress={() => navigation.navigate('Register')}
-      />
+
+      <TouchableOpacity onPress={handlePasswordReset} disabled={isLoading}>
+        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+      </TouchableOpacity>
+
+      {isLoading ? (
+        <ActivityIndicator style={{marginTop: 20}} size="large" color="#007bff" />
+      ) : (
+        <>
+          <View style={styles.buttonWrapper}>
+            <Button title="Login" onPress={handleLogin} color="#007bff" />
+          </View>
+          
+          <Text style={styles.orText}>or</Text>
+
+          <View style={styles.buttonWrapper}>
+            <Button 
+              title="Sign in with Google" 
+              onPress={signInWithGoogle} 
+              color="#4285F4" 
+            />
+          </View>
+          
+          <View style={styles.signUpWrapper}>
+            <Button
+              title="Don't have an account? Sign Up"
+              onPress={() => navigation.navigate('Register')}
+              color="#6c757d"
+            />
+          </View>
+        </>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, justifyContent: 'center', padding: 20 },
-    title: { fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20 },
-    input: { height: 40, borderColor: 'gray', borderWidth: 1, marginBottom: 12, paddingHorizontal: 10 },
+  container: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    padding: 20, 
+    backgroundColor: '#f8f9fa' 
+  },
+  title: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    textAlign: 'center', 
+    marginBottom: 24, 
+    color: '#343a40' 
+  },
+  input: { 
+    height: 50, 
+    borderColor: '#ced4da', 
+    borderWidth: 1, 
+    marginBottom: 15, 
+    paddingHorizontal: 15, 
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    fontSize: 16,
+  },
+  buttonWrapper: {
+    marginVertical: 6,
+  },
+  orText: {
+    textAlign: 'center',
+    marginVertical: 12,
+    color: '#6c757d',
+    fontSize: 16,
+    fontWeight: '600'
+  },
+  signUpWrapper: {
+    marginTop: 20,
+  },
+  forgotPasswordText: {
+    color: '#007bff',
+    textAlign: 'right',
+    marginBottom: 20,
+    fontSize: 15,
+  }
 });
+

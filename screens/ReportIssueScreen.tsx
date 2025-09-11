@@ -1,14 +1,7 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  Image,
-  StyleSheet,
-  Alert,
-  TouchableOpacity,
-  TextInput,
-  Modal,
-  ScrollView,
+import { 
+    View, Text, ImageBackground, StyleSheet, Alert, TouchableOpacity, 
+    TextInput, Modal, ScrollView, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
@@ -18,8 +11,11 @@ import MapView, { Marker, MapPressEvent } from "react-native-maps";
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from "../navigation/AppNavigator";
-import * as SecureStore from 'expo-secure-store'; // Import SecureStore
-import { API_URL } from "../config/apiConfig"; 
+import { supabase } from '../lib/supabaseClient';
+import { decode } from 'base64-arraybuffer';
+
+// Credentials for Cloudinary from your .env file
+import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "@env";
 
 // Types
 interface LocationType {
@@ -30,310 +26,307 @@ interface LocationType {
 type ReportIssueScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ReportForm'>;
 
 export default function ReportIssueScreen() {
-  const [image, setImage] = useState<string | null>(null);
-  const [department, setDepartment] = useState<string>("");
-  const [location, setLocation] = useState<LocationType | null>(null);
-  const [description, setDescription] = useState<string>("");
+    const [image, setImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
+    const [department, setDepartment] = useState<string>("");
+    const [location, setLocation] = useState<LocationType | null>(null);
+    const [description, setDescription] = useState<string>("");
+    const [mapVisible, setMapVisible] = useState<boolean>(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const navigation = useNavigation<ReportIssueScreenNavigationProp>();
 
-  const [mapVisible, setMapVisible] = useState<boolean>(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+    const pickImage = async () => {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            quality: 0.7,
+            base64: true,
+        });
+        if (!result.canceled) setImage(result.assets[0]);
+    };
 
-  const navigation = useNavigation<ReportIssueScreenNavigationProp>();
-
-  // Pick image
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.7,
-    });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
-  };
-
-  // Take photo
-  const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission required", "Camera access is needed.");
-      return;
-    }
-
-    let result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.7,
-    });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
-  };
-
-  // 📍 Get current GPS location
-  const fetchLocation = async () => {
-    let { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission required", "Location access is needed.");
-      return;
-    }
-    let currentLocation = await Location.getCurrentPositionAsync({});
-    setLocation({
-      latitude: currentLocation.coords.latitude,
-      longitude: currentLocation.coords.longitude,
-    });
-  };
-
-  // 🗺 Handle map press
-  const handleMapPress = (e: MapPressEvent) => {
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    setLocation({ latitude, longitude });
-    setMapVisible(false);
-  };
-
-  // 🗑 Delete chosen image
-  const removeImage = () => {
-    setImage(null);
-  };
-
-// Submit form
-const submitReport = async () => {
-  if (!image || !department || !location || !description.trim()) {
-    Alert.alert("Missing Info", "Please complete all fields.");
-    return;
-  }
-
-  setIsSubmitting(true);
-
-  try {
-    // 2. Create a FormData object. This is our "digital package".
-    const formData = new FormData();
-
-    // 3. Add all the text details to the package.
-    formData.append('department', department);
-    formData.append('description', description);
-    formData.append('latitude', location.latitude.toString());
-    formData.append('longitude', location.longitude.toString());
-
-    // 4. Add the image file to the package.
-    // 'report_image' is the key the server will look for.
-    formData.append('report_image', {
-      uri: image,
-      name: `photo_${Date.now()}.jpg`, // Create a unique name
-      type: `image/jpeg`,
-    } as any); 
+    const takePhoto = async () => {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+            Alert.alert("Permission required", "Camera access is needed to take a photo.");
+            return;
+        }
+        let result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            quality: 0.7,
+            base64: true,
+        });
+        if (!result.canceled) setImage(result.assets[0]);
+    };
     
-    const token = await SecureStore.getItemAsync('user_token');
-      if (!token) {
-        throw new Error("You are not logged in.");
-      }
+    const fetchLocation = async () => {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+            Alert.alert("Permission required", "Location access is needed to get your current position.");
+            return;
+        }
+        let currentLocation = await Location.getCurrentPositionAsync({});
+        setLocation({
+            latitude: currentLocation.coords.latitude,
+            longitude: currentLocation.coords.longitude,
+        });
+    };
 
-    const response = await fetch(`${API_URL}/api/reports`, {
-      method: 'POST',
-      body: formData,
-      // This header is essential! It tells the server to expect files.
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        // We will add the login token here in a later step
-        'Authorization': `Bearer ${token}`
-      },
-    });
-    // 6. Handle the server's response.
-    if (!response.ok) {
-      // If the server sent back an error, show it.
-      const errorData = await response.json();
-      throw new Error(errorData.error || "An unknown server error occurred.");
-    }
+    const handleMapPress = (e: MapPressEvent) => {
+        const { latitude, longitude } = e.nativeEvent.coordinate;
+        setLocation({ latitude, longitude });
+        setMapVisible(false);
+    };
     
-    // If successful, go to the Success screen.
-    navigation.navigate('Success');
+    const removeImage = () => setImage(null);
 
-  } catch (error: any) {
-    console.error("Submission Error:", error);
-    Alert.alert("Submission Error", error.message);
-  } finally {
-    // 7. Re-enable the submit button.
-    setIsSubmitting(false);
-  }
-};
+    // This is the updated submitReport function with both Cloudinary and Supabase logic
+    const submitReport = async () => {
+        if (!image || !department || !location || !description.trim()) {
+            Alert.alert("Missing Information", "Please fill out all fields, including a photo, department, description, and location.");
+            return;
+        }
+        setIsSubmitting(true);
 
-  return (
-    <ScrollView contentContainerStyle={styles.scrollContainer}>
-      <View style={styles.container}>
-        <Text style={styles.title}>📢 Report a Civic Issue</Text>
+        try {
+            if (!image.base64) throw new Error("Image data is missing.");
+            
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error("User not found. Please log in again.");
 
-        {/* Upload Photo */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Upload a Photo:</Text>
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.button} onPress={pickImage}>
-              <Text style={styles.btnText}>Choose in Gallery</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.button} onPress={takePhoto}>
-              <Text style={styles.btnText}>Take Photo</Text>
-            </TouchableOpacity>
-          </View>
+            let imageUrl = '';
 
-          {image && (
-            <View style={styles.imageWrapper}>
-              <Image source={{ uri: image }} style={styles.image} />
-              <TouchableOpacity style={styles.deleteBtn} onPress={removeImage}>
-                <Ionicons name="close-circle" size={28} color="red" />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+           
+            // --- OPTION 2: SUPABASE STORAGE UPLOAD (Currently Commented Out) ---
+            
+            const fileExt = image.uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+            const filePath = `${user.id}/${Date.now()}.${fileExt}`;
+            const contentType = `image/${fileExt}`;
+            const { error: uploadError } = await supabase.storage
+                .from('report_images')
+                .upload(filePath, decode(image.base64), { contentType });
+            if (uploadError) throw uploadError;
+            const { data: urlData } = supabase.storage
+                .from('report_images')
+                .getPublicUrl(filePath);
+            if (!urlData) throw new Error("Could not get image URL from Supabase.");
+            imageUrl = urlData.publicUrl;
+            
+           
+            // --- INSERT THE REPORT INTO SUPABASE DATABASE ---
+            const { error: insertError } = await supabase.from('reports').insert({
+                user_id: user.id,
+                department,
+                description,
+                latitude: location.latitude,
+                longitude: location.longitude,
+                image_url: imageUrl, // Uses the URL from the active service above
+                status: 'Not Completed',
+            });
 
-        {/* Department */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Select Department:</Text>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={department}
-              onValueChange={(itemValue) => setDepartment(itemValue)}
+            if (insertError) throw insertError;
+
+            navigation.navigate('Success');
+
+        } catch (error: any) {
+            console.error("Submission Error:", error);
+            Alert.alert("Submission Error", error.message || "An unknown error occurred.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <SafeAreaView style={styles.safeArea}>
+            <KeyboardAvoidingView
+            // Adjust behavior based on the operating system
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
             >
-              <Picker.Item label="-- Select Department --" value="" />
-              <Picker.Item label="Electricity" value="Electricity" />
-              <Picker.Item label="Sewage" value="Sewage" />
-              <Picker.Item label="Roads" value="Roads" />
-              <Picker.Item label="Water Supply" value="Water Supply" />
-              <Picker.Item label="Sanitation" value="Sanitation" />
-            </Picker>
-          </View>
-        </View>
+            <ScrollView contentContainerStyle={styles.scrollContainer}>
+                <View style={styles.container}>
+                    <Text style={styles.title}>File a New Report</Text>
+                    
+                    {/* Photo Section */}
+                    <View style={styles.card}>
+                        <Text style={styles.label}>1. Add a Photo</Text>
+                        {image?.uri ? (
+                            <ImageBackground source={{ uri: image.uri }} style={styles.imagePreview} imageStyle={{ borderRadius: 10 }}>
+                                <TouchableOpacity style={styles.deleteBtn} onPress={removeImage}>
+                                    <Ionicons name="close-circle" size={32} color="#fff" />
+                                </TouchableOpacity>
+                            </ImageBackground>
+                        ) : (
+                            <View style={styles.photoPlaceholder}>
+                                <TouchableOpacity style={styles.photoButton} onPress={pickImage}>
+                                    <Ionicons name="images-outline" size={24} color="#007bff" />
+                                    <Text style={styles.photoButtonText}>Choose from Gallery</Text>
+                                </TouchableOpacity>
+                                 <TouchableOpacity style={styles.photoButton} onPress={takePhoto}>
+                                    <Ionicons name="camera-outline" size={24} color="#007bff" />
+                                    <Text style={styles.photoButtonText}>Take Photo</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </View>
 
-        {/* Description */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Issue Description:</Text>
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Describe the issue..."
-              value={description}
-              onChangeText={setDescription}
-              multiline
-            />
-          </View>
-        </View>
+                    {/* Details Section */}
+                    <View style={styles.card}>
+                        <Text style={styles.label}>2. Provide Details</Text>
+                        <View style={styles.pickerWrapper}>
+                            <Picker selectedValue={department} onValueChange={(itemValue) => setDepartment(itemValue)}>
+                                <Picker.Item label="Select Department..." value="" />
+                                <Picker.Item label="Electricity" value="Electricity" />
+                                <Picker.Item label="Sewage" value="Sewage" />
+                                <Picker.Item label="Roads" value="Roads" />
+                                <Picker.Item label="Water Supply" value="Water Supply" />
+                                <Picker.Item label="Sanitation" value="Sanitation" />
+                            </Picker>
+                        </View>
 
-        {/* Location */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Location:</Text>
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.locationBtn} onPress={fetchLocation}>
-              <Text style={styles.btnText}>Current Location</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.locationBtn, { backgroundColor: "#6f42c1" }]}
-              onPress={() => setMapVisible(true)}
-            >
-              <Text style={styles.btnText}>Locate on Map</Text>
-            </TouchableOpacity>
-          </View>
-          {location && (
-            <Text style={styles.locationText}>
-              📍 {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}
-            </Text>
-          )}
-        </View>
+                        <View style={styles.descriptionContainer}>
+                            <TextInput style={styles.textInput} placeholder="Describe the issue in detail..." value={description} onChangeText={setDescription} multiline />
+                            <TouchableOpacity style={styles.micButton}>
+                                <Ionicons name="mic-outline" size={24} color="#8e8e93" />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
 
-        {/* Submit */}
-        <TouchableOpacity
-          style={[styles.submitBtn, isSubmitting && styles.disabledBtn]} // Adds a disabled style
-          onPress={submitReport}
-          disabled={isSubmitting} // Disables the button when submitting
-        >
-          <Text style={styles.submitText}>
-            {isSubmitting ? 'Submitting...' : 'Submit Report'} 
-          </Text>
-        </TouchableOpacity>
+                    {/* Location Section */}
+                    <View style={styles.card}>
+                        <Text style={styles.label}>3. Set Location</Text>
+                         <View style={styles.locationButtons}>
+                            <TouchableOpacity style={styles.locationBtn} onPress={fetchLocation}>
+                                <Ionicons name="navigate-circle-outline" size={20} color="#fff" />
+                                <Text style={styles.btnText}>Use Current Location</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.locationBtn, { backgroundColor: "#6c757d" }]} onPress={() => setMapVisible(true)}>
+                                <Ionicons name="map-outline" size={20} color="#fff" />
+                                <Text style={styles.btnText}>Select on Map</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {location && <Text style={styles.locationText}>Location selected: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}</Text>}
+                    </View>
 
-        {/* Map Modal */}
-        <Modal visible={mapVisible} animationType="slide">
-          <View style={{ flex: 1 }}>
-            <MapView
-              style={{ flex: 1 }}
-              initialRegion={{
-                latitude: 20.5937,
-                longitude: 78.9629,
-                latitudeDelta: 10,
-                longitudeDelta: 10,
-              }}
-              onPress={handleMapPress}
-            >
-              {location && <Marker coordinate={location} />}
-            </MapView>
-            <TouchableOpacity
-              style={[styles.submitBtn, { margin: 20, backgroundColor: "red" }]}
-              onPress={() => setMapVisible(false)}
-            >
-              <Text style={styles.submitText}>Close Map</Text>
-            </TouchableOpacity>
-          </View>
-        </Modal>
-      </View>
-    </ScrollView>
-  );
+                    {/* Submit Button */}
+                    <TouchableOpacity style={[styles.submitBtn, isSubmitting && styles.disabledBtn]} onPress={submitReport} disabled={isSubmitting}>
+                        {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Submit Report</Text>}
+                    </TouchableOpacity>
+                    
+                    {/* Map Modal */}
+                    <Modal visible={mapVisible} animationType="slide">
+                        <View style={{ flex: 1 }}>
+                            <MapView style={{ flex: 1 }} initialRegion={{ latitude: 13.0827, longitude: 80.2707, latitudeDelta: 0.2, longitudeDelta: 0.2, }} onPress={handleMapPress}>
+                                {location && <Marker coordinate={location} />}
+                            </MapView>
+                            <TouchableOpacity style={styles.closeMapButton} onPress={() => setMapVisible(false)}>
+                                <Text style={styles.submitText}>Close Map</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Modal>
+                </View>
+            </ScrollView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
+    );
 }
 
-// ------------------- STYLES -------------------
 const styles = StyleSheet.create({
-  scrollContainer: { flexGrow: 1 },
-  container: { flex: 1, padding: 20, backgroundColor: "#f8f9fa" },
-  title: { fontSize: 24, fontWeight: "bold", textAlign: "center", marginBottom: 25 },
-  section: { marginBottom: 20 },
-  label: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
-  buttonRow: { flexDirection: "row", justifyContent: "space-between" },
-  button: {
-    backgroundColor: "#007bff",
-    padding: 12,
-    borderRadius: 8,
-    marginVertical: 5,
-    marginHorizontal: 5,
-    alignItems: "center",
-    flex: 1,
-  },
-  btnText: { color: "#fff", textAlign: "center", fontSize: 16, fontWeight: "600" },
-  imageWrapper: {
-    position: "relative",
-    marginTop: 10,
-  },
-  image: { width: "100%", height: 200, borderRadius: 10 },
-  deleteBtn: {
-    position: "absolute",
-    top: 5,
-    right: 5,
-    backgroundColor: "white",
-    borderRadius: 15,
-  },
-  pickerWrapper: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8 },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-  },
-  textInput: { flex: 1, padding: 10, minHeight: 60, fontSize: 16 },
-  locationBtn: {
-    backgroundColor: "#007bff",
-    padding: 12,
-    borderRadius: 8,
-    margin: 5,
-    alignItems: "center",
-    flex: 1,
-  },
-  locationText: { marginTop: 10, fontSize: 14, fontWeight: "500", color: "#333" },
-  submitBtn: {
-    backgroundColor: "#28a745",
-    padding: 15,
-    borderRadius: 10,
-    marginTop: 20,
-  },
-  submitText: { color: "#fff", fontSize: 18, textAlign: "center", fontWeight: "bold" },
-
-  disabledBtn: {
-    backgroundColor: '#9fdaab', // A lighter green color
-  },
+    safeArea: { flex: 1, backgroundColor: "#f0f2f5" },
+    scrollContainer: { flexGrow: 1, paddingVertical: 10 },
+    container: { flex: 1, paddingHorizontal: 15 },
+    title: { fontSize: 28, fontWeight: "bold", textAlign: "center", marginBottom: 20, color: '#1c1c1e' },
+    card: { 
+        backgroundColor: '#fff', 
+        borderRadius: 12, 
+        padding: 15, 
+        marginBottom: 20,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 3,
+    },
+    label: { fontSize: 18, fontWeight: "600", marginBottom: 12, color: '#343a40' },
+    photoPlaceholder: {
+        height: 150,
+        borderRadius: 10,
+        backgroundColor: '#e9ecef',
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexDirection: 'row',
+    },
+    photoButton: {
+        alignItems: 'center',
+        marginHorizontal: 20,
+    },
+    photoButtonText: {
+        marginTop: 5,
+        color: '#007bff',
+        fontWeight: '600',
+    },
+    imagePreview: {
+        width: "100%", 
+        height: 200, 
+        justifyContent: 'flex-end',
+        alignItems: 'flex-end',
+    },
+    deleteBtn: { 
+        padding: 8,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 20,
+        margin: 5,
+    },
+    pickerWrapper: { 
+        borderWidth: 1, 
+        borderColor: "#ced4da", 
+        borderRadius: 8,
+        marginBottom: 15,
+    },
+    descriptionContainer: {
+        position: 'relative',
+    },
+    textInput: { 
+        borderWidth: 1, 
+        borderColor: "#ced4da", 
+        borderRadius: 8, 
+        padding: 12, 
+        minHeight: 100, 
+        fontSize: 16,
+        textAlignVertical: 'top',
+        paddingRight: 40,
+    },
+    micButton: {
+        position: 'absolute',
+        right: 10,
+        top: 12,
+    },
+    locationButtons: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    locationBtn: { 
+        backgroundColor: "#007bff", 
+        paddingVertical: 12, 
+        borderRadius: 8, 
+        alignItems: "center", 
+        flex: 1, 
+        marginHorizontal: 5, 
+        flexDirection: 'row',
+        justifyContent: 'center'
+    },
+    btnText: { color: "#fff", fontSize: 15, fontWeight: "600", marginLeft: 8 },
+    locationText: { marginTop: 15, fontSize: 14, color: "#28a745", textAlign: 'center', fontWeight: '500' },
+    submitBtn: { backgroundColor: "#28a745", padding: 15, borderRadius: 10, alignItems: 'center' },
+    submitText: { color: "#fff", fontSize: 18, textAlign: "center", fontWeight: "bold" },
+    disabledBtn: { backgroundColor: '#9fdaab' },
+    closeMapButton: {
+        position: 'absolute',
+        bottom: 30,
+        left: 20,
+        right: 20,
+        backgroundColor: "#dc3545",
+        padding: 15,
+        borderRadius: 10,
+    }
 });
+
