@@ -21,17 +21,9 @@ export default function LoginScreen() {
     }
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: password,
-      });
-
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
       navigation.navigate('Home');
-
-      if (error) {
-        throw new Error(error.message || "Invalid email or password.");
-      }
-      // On success, the AuthProvider will handle navigation.
     } catch (error: any) {
       Alert.alert("Login Failed", error.message);
     } finally {
