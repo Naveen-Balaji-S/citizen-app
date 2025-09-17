@@ -38,7 +38,10 @@ export default function AppNavigator() {
       <Stack.Screen
         name="Home"
         component={HomeScreen}
-        options={{ title: 'Dashboard' }} 
+        options={{ 
+          title: 'Dashboard',
+          headerLeft: () => null    // 👈 hides the back arrow
+        }} 
       />
       <Stack.Screen
         name="ReportForm"
@@ -55,6 +58,7 @@ export default function AppNavigator() {
         component={ViewReportsScreen}
         options={{ title: 'View Past Reports' }}
       />
+      
     </Stack.Navigator>
   );
 }
