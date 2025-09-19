@@ -23,7 +23,10 @@ export default function LoginScreen() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      navigation.navigate('Home');
+      navigation.reset({
+      index: 0,
+      routes: [{ name: 'Home' }],
+    });
     } catch (error: any) {
       Alert.alert("Login Failed", error.message);
     } finally {
