@@ -19,8 +19,10 @@
     "dotenv": "^17.2.2",
     "expo": "~53.0.22",
     "expo-av": "~15.1.7",
+    "expo-device": "~7.1.4",
     "expo-image-picker": "~16.1.4",
     "expo-location": "~18.1.6",
+    "expo-notifications": "~0.31.4",
     "expo-secure-store": "~14.2.4",
     "expo-status-bar": "~2.2.3",
     "react": "19.0.0",
@@ -32,8 +34,8 @@
     "react-native-toast-message": "^2.3.3",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-vector-icons": "^10.3.0",
-    "expo-notifications": "~0.31.4",
-    "expo-device": "~7.1.4"
+    "react-native-webview": "^13.16.0",
+    "expo-file-system": "~18.1.11"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

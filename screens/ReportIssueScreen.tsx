@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
     View, Text, ImageBackground, StyleSheet, Alert, TouchableOpacity, 
     TextInput, Modal, ScrollView, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform
@@ -6,8 +6,10 @@ import {
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
+import * as FileSystem from 'expo-file-system';
+import { Audio } from 'expo-av';
 import { Ionicons } from "@expo/vector-icons";
-import MapView, { Marker, MapPressEvent } from "react-native-maps";
+import { WebView } from 'react-native-webview';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from "../navigation/AppNavigator";
@@ -19,20 +21,37 @@ import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "@env";
 
 // Types
 interface LocationType {
-  latitude: number;
-  longitude: number;
+    latitude: number;
+    longitude: number;
 }
 
 type ReportIssueScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ReportForm'>;
 
 export default function ReportIssueScreen() {
     const [image, setImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
-    const [department, setDepartment] = useState<string>("");
+    const [departmentId, setDepartmentId] = useState<number | null>(null);
     const [location, setLocation] = useState<LocationType | null>(null);
     const [description, setDescription] = useState<string>("");
     const [mapVisible, setMapVisible] = useState<boolean>(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [departments, setDepartments] = useState<{ id: number; name: string }[]>([]);
+    const [recording, setRecording] = useState<Audio.Recording | null>(null);
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordedAudioUri, setRecordedAudioUri] = useState<string | null>(null);
+    const [playbackSound, setPlaybackSound] = useState<Audio.Sound | null>(null);
     const navigation = useNavigation<ReportIssueScreenNavigationProp>();
+
+    useEffect(() => {
+        const fetchDepartments = async () => {
+            const { data, error } = await supabase.from('departments').select('id, name');
+            if (error) {
+                console.error("Failed to fetch departments:", error.message);
+            } else {
+                setDepartments(data || []);
+            }
+        };
+        fetchDepartments();
+    }, []);
 
     const pickImage = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
@@ -70,18 +89,131 @@ export default function ReportIssueScreen() {
             longitude: currentLocation.coords.longitude,
         });
     };
-
-    const handleMapPress = (e: MapPressEvent) => {
-        const { latitude, longitude } = e.nativeEvent.coordinate;
-        setLocation({ latitude, longitude });
-        setMapVisible(false);
-    };
     
     const removeImage = () => setImage(null);
 
-    // This is the updated submitReport function with both Cloudinary and Supabase logic
+    // --- Audio Recording Functions ---
+    const startRecording = async () => {
+        try {
+            const { status } = await Audio.requestPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert("Permission required", "Audio recording access is needed.");
+                return;
+            }
+            if (playbackSound) {
+                await playbackSound.unloadAsync();
+                setPlaybackSound(null);
+            }
+            setRecordedAudioUri(null);
+
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+            });
+            const newRecording = new Audio.Recording();
+            await newRecording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+            await newRecording.startAsync();
+            setRecording(newRecording);
+            setIsRecording(true);
+            Alert.alert("Recording", "Recording has started. Tap the stop icon to finish.");
+        } catch (err) {
+            console.error('Failed to start recording', err);
+            Alert.alert("Recording Error", "Failed to start recording. Please try again.");
+            setIsRecording(false);
+        }
+    };
+
+    const stopRecording = async () => {
+    if (!recording) return;
+    setIsRecording(false);
+    try {
+        await recording.stopAndUnloadAsync();
+        
+        // This is a key step to ensure the audio session is ready for playback.
+        await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            playsInSilentModeIOS: true,
+            interruptionModeIOS: 1,
+            interruptionModeAndroid: 1,
+            shouldDuckAndroid: true,
+        });
+
+        const uri = recording.getURI();
+        setRecording(null);
+        if (uri) {
+            setRecordedAudioUri(uri);
+            Alert.alert("Recording Saved", "Audio recording has been saved.");
+        }
+    } catch (err) {
+        console.error('Failed to stop recording', err);
+        Alert.alert("Recording Error", "Failed to stop recording. Please try again.");
+    }
+};
+
+    const playRecordedAudio = async () => {
+    if (!recordedAudioUri) {
+        Alert.alert("No Audio", "There is no recorded audio to play.");
+        return;
+    }
+
+    if (playbackSound) {
+        await playbackSound.unloadAsync();
+        setPlaybackSound(null);
+    }
+
+    try {
+        // Re-confirm playback mode just to be safe.
+        await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            playsInSilentModeIOS: true,
+            interruptionModeIOS: 1,
+            interruptionModeAndroid: 1,
+            shouldDuckAndroid: true,
+        });
+
+        const { sound } = await Audio.Sound.createAsync(
+            { uri: recordedAudioUri },
+            { shouldPlay: true }
+        );
+        setPlaybackSound(sound);
+
+        sound.setOnPlaybackStatusUpdate(status => {
+            if (status.isLoaded && status.didJustFinish) {
+                sound.unloadAsync();
+                setPlaybackSound(null);
+            }
+        });
+    } catch (err) {
+        console.error('Failed to play sound', err);
+        Alert.alert("Playback Error", "Failed to play the recorded audio. Check permissions and file access.");
+    }
+};
+
+    const deleteRecordedAudio = async () => {
+        if (playbackSound) {
+            await playbackSound.unloadAsync();
+            setPlaybackSound(null);
+        }
+        setRecordedAudioUri(null);
+        Alert.alert("Recording Deleted", "The recorded audio has been deleted.");
+    };
+
+    const handleMicPress = () => {
+        if (isRecording) {
+            stopRecording();
+        } else {
+            startRecording();
+        }
+    };
+    // ------------------------------------
+
     const submitReport = async () => {
-        if (!image || !department || !location || !description.trim()) {
+        if (isRecording) {
+            Alert.alert("Please wait", "Please stop the audio recording first.");
+            return;
+        }
+
+        if (!image || departmentId === null || !location || !description.trim()) {
             Alert.alert("Missing Information", "Please fill out all fields, including a photo, department, description, and location.");
             return;
         }
@@ -93,11 +225,7 @@ export default function ReportIssueScreen() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error("User not found. Please log in again.");
 
-            let imageUrl = '';
-
-           
-            // --- OPTION 2: SUPABASE STORAGE UPLOAD (Currently Commented Out) ---
-            
+            // --- IMAGE UPLOAD ---
             const fileExt = image.uri.split('.').pop()?.toLowerCase() ?? 'jpg';
             const filePath = `${user.id}/${Date.now()}.${fileExt}`;
             const contentType = `image/${fileExt}`;
@@ -109,23 +237,50 @@ export default function ReportIssueScreen() {
                 .from('report_images')
                 .getPublicUrl(filePath);
             if (!urlData) throw new Error("Could not get image URL from Supabase.");
-            imageUrl = urlData.publicUrl;
+            const imageUrl = urlData.publicUrl;
             
-           
+            // --- AUDIO UPLOAD (If a recording exists) ---
+            let audioUrl = null;
+            if (recordedAudioUri) {
+                const audioExt = recordedAudioUri.split('.').pop()?.toLowerCase() ?? 'm4a';
+                const audioPath = `${user.id}/audio_${Date.now()}.${audioExt}`;
+                const audioBase64 = await FileSystem.readAsStringAsync(recordedAudioUri, { encoding: FileSystem.EncodingType.Base64 });
+                const audioArrayBuffer = decode(audioBase64);
+
+                const { error: audioUploadError } = await supabase.storage
+                    .from('report_audio')
+                    .upload(audioPath, audioArrayBuffer, { contentType: `audio/${audioExt}` });
+                if (audioUploadError) throw audioUploadError;
+
+                const { data: audioUrlData } = supabase.storage
+                    .from('report_audio')
+                    .getPublicUrl(audioPath);
+                if (!audioUrlData) throw new Error("Could not get audio URL from Supabase.");
+                audioUrl = audioUrlData.publicUrl;
+            }
+            
             // --- INSERT THE REPORT INTO SUPABASE DATABASE ---
             const { error: insertError } = await supabase.from('reports').insert({
                 user_id: user.id,
-                department,
+                department_id: departmentId,
                 description,
                 latitude: location.latitude,
                 longitude: location.longitude,
-                image_url: imageUrl, // Uses the URL from the active service above
-                status: 'Not Completed',
+                image_url: imageUrl,
+                audio_url: audioUrl,
+                status: 'Submitted',
             });
 
             if (insertError) throw insertError;
 
             navigation.navigate('Success');
+
+            await supabase.from('user_notifications').insert({
+                user_id: user.id,
+                title: 'Report Submitted',
+                body: `Your report "${description}" has been submitted successfully.`,
+                is_read: false,
+            });
 
         } catch (error: any) {
             console.error("Submission Error:", error);
@@ -138,7 +293,6 @@ export default function ReportIssueScreen() {
     return (
         <SafeAreaView style={styles.safeArea}>
             <KeyboardAvoidingView
-            // Adjust behavior based on the operating system
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={{ flex: 1 }}
             >
@@ -161,50 +315,75 @@ export default function ReportIssueScreen() {
                                     <Ionicons name="images-outline" size={24} color="#007bff" />
                                     <Text style={styles.photoButtonText}>Choose from Gallery</Text>
                                 </TouchableOpacity>
-                                 <TouchableOpacity style={styles.photoButton} onPress={takePhoto}>
+                                <TouchableOpacity style={styles.photoButton} onPress={takePhoto}>
                                     <Ionicons name="camera-outline" size={24} color="#007bff" />
                                     <Text style={styles.photoButtonText}>Take Photo</Text>
                                 </TouchableOpacity>
                             </View>
                         )}
                     </View>
-
+                    
                     {/* Details Section */}
                     <View style={styles.card}>
                         <Text style={styles.label}>2. Provide Details</Text>
                         <View style={styles.pickerWrapper}>
-                            <Picker selectedValue={department} onValueChange={(itemValue) => setDepartment(itemValue)}>
-                                <Picker.Item label="Select Department..." value="" />
-                                <Picker.Item label="Electricity" value="Electricity" />
-                                <Picker.Item label="Sewage" value="Sewage" />
-                                <Picker.Item label="Roads" value="Roads" />
-                                <Picker.Item label="Water Supply" value="Water Supply" />
-                                <Picker.Item label="Sanitation" value="Sanitation" />
+                            <Picker selectedValue={departmentId} onValueChange={(itemValue) => setDepartmentId(itemValue)}>
+                                <Picker.Item label="Select Department..." value={null} />
+                                {departments.map((dept) => (
+                                    <Picker.Item key={dept.id} label={dept.name} value={dept.id} />
+                                ))}
                             </Picker>
                         </View>
-
                         <View style={styles.descriptionContainer}>
-                            <TextInput style={styles.textInput} placeholder="Describe the issue in detail..." value={description} onChangeText={setDescription} multiline />
-                            <TouchableOpacity style={styles.micButton}>
-                                <Ionicons name="mic-outline" size={24} color="#8e8e93" />
+                            <TextInput 
+                                style={styles.textInput} 
+                                placeholder="Describe the issue in detail..." 
+                                value={description} 
+                                onChangeText={setDescription} 
+                                multiline 
+                            />
+                            <TouchableOpacity style={styles.micButton} onPress={handleMicPress}>
+                                <Ionicons 
+                                    name={isRecording ? "stop-circle-outline" : "mic-outline"} 
+                                    size={24} 
+                                    color={isRecording ? '#dc3545' : '#8e8e93'} 
+                                />
                             </TouchableOpacity>
                         </View>
+                        {recordedAudioUri && (
+                            <View style={styles.audioControlsContainer}>
+                                <TouchableOpacity style={styles.playButton} onPress={playRecordedAudio}>
+                                    <Ionicons name="play-circle-outline" size={24} color="#fff" />
+                                    <Text style={styles.playButtonText}>Play Audio</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.deleteButton} onPress={deleteRecordedAudio}>
+                                    <Ionicons name="trash-outline" size={24} color="#fff" />
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </View>
 
                     {/* Location Section */}
                     <View style={styles.card}>
                         <Text style={styles.label}>3. Set Location</Text>
-                         <View style={styles.locationButtons}>
+                        <View style={styles.locationButtons}>
                             <TouchableOpacity style={styles.locationBtn} onPress={fetchLocation}>
                                 <Ionicons name="navigate-circle-outline" size={20} color="#fff" />
                                 <Text style={styles.btnText}>Use Current Location</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={[styles.locationBtn, { backgroundColor: "#6c757d" }]} onPress={() => setMapVisible(true)}>
+                            <TouchableOpacity
+                                style={[styles.locationBtn, { backgroundColor: "#6c757d" }]}
+                                onPress={() => setMapVisible(true)}
+                            >
                                 <Ionicons name="map-outline" size={20} color="#fff" />
                                 <Text style={styles.btnText}>Select on Map</Text>
                             </TouchableOpacity>
                         </View>
-                        {location && <Text style={styles.locationText}>Location selected: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}</Text>}
+                        {location && (
+                            <Text style={styles.locationText}>
+                                Location selected: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+                            </Text>
+                        )}
                     </View>
 
                     {/* Submit Button */}
@@ -212,16 +391,26 @@ export default function ReportIssueScreen() {
                         {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Submit Report</Text>}
                     </TouchableOpacity>
                     
-                    {/* Map Modal */}
+                    {/* Map Modal with OpenStreetMap */}
                     <Modal visible={mapVisible} animationType="slide">
-                        <View style={{ flex: 1 }}>
-                            <MapView style={{ flex: 1 }} initialRegion={{ latitude: 13.0827, longitude: 80.2707, latitudeDelta: 0.2, longitudeDelta: 0.2, }} onPress={handleMapPress}>
-                                {location && <Marker coordinate={location} />}
-                            </MapView>
-                            <TouchableOpacity style={styles.closeMapButton} onPress={() => setMapVisible(false)}>
-                                <Text style={styles.submitText}>Close Map</Text>
-                            </TouchableOpacity>
-                        </View>
+                        <WebView
+                            originWhitelist={['*']}
+                            source={require('../assets/leafletMap.html')}
+                            onMessage={(event) => {
+                                const { lat, lng } = JSON.parse(event.nativeEvent.data);
+                                setLocation({ latitude: lat, longitude: lng });
+                                setMapVisible(false);
+                            }}
+                            style={{ flex: 1 }}
+                        />
+                        <TouchableOpacity
+                            style={styles.closeMapButton}
+                            onPress={() => setMapVisible(false)}
+                        >
+                            <Text style={{ color: '#fff', fontSize: 16, textAlign: 'center' }}>
+                            Close Map
+                            </Text>
+                        </TouchableOpacity>
                     </Modal>
                 </View>
             </ScrollView>
@@ -319,6 +508,16 @@ const styles = StyleSheet.create({
     submitBtn: { backgroundColor: "#28a745", padding: 15, borderRadius: 10, alignItems: 'center' },
     submitText: { color: "#fff", fontSize: 18, textAlign: "center", fontWeight: "bold" },
     disabledBtn: { backgroundColor: '#9fdaab' },
+    attribution: {
+        position: 'absolute',
+        bottom: 8,
+        alignSelf: 'center',
+        fontSize: 12,
+        color: '#333',
+        backgroundColor: 'rgba(255,255,255,0.7)',
+        paddingHorizontal: 6,
+        borderRadius: 4
+    },
     closeMapButton: {
         position: 'absolute',
         bottom: 30,
@@ -327,6 +526,35 @@ const styles = StyleSheet.create({
         backgroundColor: "#dc3545",
         padding: 15,
         borderRadius: 10,
-    }
+    },
+    audioControlsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    playButton: {
+        backgroundColor: '#007bff',
+        padding: 12,
+        borderRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+    playButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 8,
+    },
+    deleteButton: {
+        backgroundColor: '#dc3545',
+        padding: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 50,
+    },
 });
-

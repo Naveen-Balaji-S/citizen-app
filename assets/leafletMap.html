@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="initial-scale=1, maximum-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css"
+  />
+  <style>
+    html, body, #map { height:100%; margin:0; padding:0; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <!-- 1️⃣ Load Leaflet first -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- 2️⃣ Then load the geocoder plugin -->
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+  <script>
+    const map = L.map('map').setView([13.0827, 80.2707], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+    }).addTo(map);
+
+    let marker;
+    map.on('click', function (e) {
+      if (marker) map.removeLayer(marker);
+      marker = L.marker(e.latlng).addTo(map);
+      window.ReactNativeWebView.postMessage(JSON.stringify(e.latlng));
+    });
+
+    // Geocoder control
+    L.Control.geocoder({
+      defaultMarkGeocode: false
+    })
+    .on('markgeocode', function (e) {
+      const bbox = e.geocode.bbox;
+      const center = e.geocode.center;
+      map.fitBounds(bbox);
+      if (marker) map.removeLayer(marker);
+      marker = L.marker(center).addTo(map);
+    })
+    .addTo(map);
+  </script>
+</body>
+</html>

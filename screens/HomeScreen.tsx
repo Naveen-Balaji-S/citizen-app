@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { supabase } from '../lib/supabaseClient';
@@ -24,13 +24,28 @@ export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const isFocused = useIsFocused();
 
   const expoPushToken = usePushTokens();
+
   useEffect(() => {
-    if (expoPushToken) {
-      console.log('Expo Push Token:', expoPushToken);
-    }
+    if (expoPushToken) console.log('Expo Push Token:', expoPushToken);
   }, [expoPushToken]);
+
+  // Load unread count whenever screen gains focus
+  useEffect(() => {
+    const fetchUnread = async () => {
+      if (!user) return;
+      const { count, error } = await supabase
+        .from('user_notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+      if (!error && count !== null) setUnreadCount(count);
+    };
+    if (isFocused) fetchUnread();
+  }, [isFocused, user]);
 
   useEffect(() => {
     const init = async () => {
@@ -47,14 +62,26 @@ export default function HomeScreen() {
             { event: '*', schema: 'public', table: 'reports', filter: `user_id=eq.${session.user.id}` },
             async (payload) => {
               const report = payload.new as { description?: string; status?: string };
+
               if (report?.description && report?.status) {
+                const title = 'Report Status Updated';
+                const body  = `Your report "${report.description}" is now ${report.status}`;
+
                 await Notifications.scheduleNotificationAsync({
-                  content: {
-                    title: 'Report Status Updated',
-                    body: `Your report "${report.description}" is now ${report.status}`,
-                  },
+                  content: { title, body },
                   trigger: null,
                 });
+
+                // Save to Supabase for listing
+                await supabase.from('user_notifications').insert({
+                  user_id: session.user.id,
+                  title,
+                  body,
+                  is_read: false,
+                });
+
+                // Increment badge count immediately
+                setUnreadCount((c) => c + 1);
               }
             }
           )
@@ -100,12 +127,22 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.iconRow}>
-            {/* Bell icon to Notifications screen */}
-            <TouchableOpacity style={styles.iconButton} onPress={() => Alert.alert('Notifications', 'Coming soon!')}>
+            {/* Bell icon with badge */}
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => navigation.navigate('Notifications')}
+            >
               <Ionicons name="notifications-outline" size={26} color="#1c1c1e" />
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
 
-            {/* Profile icon to show email */}
+            {/* Profile icon */}
             <TouchableOpacity
               style={styles.iconButton}
               onPress={() => user && Alert.alert('Logged in as', user.email!)}
@@ -152,6 +189,19 @@ const styles = StyleSheet.create({
   welcomeSubtitle: { fontSize: 16, color: '#6c757d' },
   iconRow: { flexDirection: 'row', alignItems: 'center' },
   iconButton: { marginLeft: 16 },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: 'red',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
   mapContainer: {
     flex: 0.7,
     backgroundColor: '#e9ecef',
