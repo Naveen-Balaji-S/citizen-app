@@ -9,6 +9,8 @@ import ViewReportsScreen from '../screens/ViewReportsScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import LeaderboardScreen from '../screens/LeaderboardScreen';
+import CommunityReportsScreen from '../screens/CommunityReportsScreen';
 
 // Define the type for the screen parameters, if any. For now, it's undefined.
 export type RootStackParamList = {
@@ -19,6 +21,8 @@ export type RootStackParamList = {
   Success: undefined;
   ViewReports: undefined; 
   Notifications: undefined;
+  Leaderboard: undefined;      
+  CommunityReports: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -64,6 +68,16 @@ export default function AppNavigator() {
         name="Notifications"
         component={NotificationsScreen}
         options={{ title: 'Notifications' }}
+      />
+      <Stack.Screen
+        name="Leaderboard"
+        component={LeaderboardScreen}
+        options={{ title: 'Leaderboard' }}
+      />
+      <Stack.Screen
+        name="CommunityReports"
+        component={CommunityReportsScreen}
+        options={{ title: 'Community Reports' }}
       />
     </Stack.Navigator>
   );

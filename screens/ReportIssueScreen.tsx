@@ -6,7 +6,7 @@ import {
 import { Picker } from "@react-native-picker/picker";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Audio } from 'expo-av';
 import { Ionicons } from "@expo/vector-icons";
 import { WebView } from 'react-native-webview';
@@ -15,9 +15,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from "../navigation/AppNavigator";
 import { supabase } from '../lib/supabaseClient';
 import { decode } from 'base64-arraybuffer';
-
-// Credentials for Cloudinary from your .env file
-import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from "@env";
+import MapView, { UrlTile, Region } from 'react-native-maps';
 
 // Types
 interface LocationType {
@@ -40,6 +38,7 @@ export default function ReportIssueScreen() {
     const [recordedAudioUri, setRecordedAudioUri] = useState<string | null>(null);
     const [playbackSound, setPlaybackSound] = useState<Audio.Sound | null>(null);
     const navigation = useNavigation<ReportIssueScreenNavigationProp>();
+    const [mapRegion, setMapRegion] = useState<Region | undefined>(undefined);
 
     useEffect(() => {
         const fetchDepartments = async () => {
@@ -205,8 +204,7 @@ export default function ReportIssueScreen() {
             startRecording();
         }
     };
-    // ------------------------------------
-
+    
     const submitReport = async () => {
         if (isRecording) {
             Alert.alert("Please wait", "Please stop the audio recording first.");
@@ -244,7 +242,7 @@ export default function ReportIssueScreen() {
             if (recordedAudioUri) {
                 const audioExt = recordedAudioUri.split('.').pop()?.toLowerCase() ?? 'm4a';
                 const audioPath = `${user.id}/audio_${Date.now()}.${audioExt}`;
-                const audioBase64 = await FileSystem.readAsStringAsync(recordedAudioUri, { encoding: FileSystem.EncodingType.Base64 });
+                const audioBase64 = await FileSystem.readAsStringAsync(recordedAudioUri, { encoding: 'base64' });
                 const audioArrayBuffer = decode(audioBase64);
 
                 const { error: audioUploadError } = await supabase.storage
@@ -289,6 +287,35 @@ export default function ReportIssueScreen() {
             setIsSubmitting(false);
         }
     };
+
+    const openMapSelector = async () => {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+            Alert.alert("Permission required", "Location access is needed.");
+            return;
+        }
+        let currentPos = await Location.getCurrentPositionAsync({});
+        // Set the initial region of the map to the user's current location
+        setMapRegion({
+            latitude: currentPos.coords.latitude,
+            longitude: currentPos.coords.longitude,
+            latitudeDelta: 0.01, // Zoom level
+            longitudeDelta: 0.01, // Zoom level
+        });
+        setMapVisible(true);
+    };
+
+    // --- NEW FUNCTION to handle confirming the location from the map modal ---
+    const onConfirmLocation = () => {
+        if (mapRegion) {
+            setLocation({
+                latitude: mapRegion.latitude,
+                longitude: mapRegion.longitude,
+            });
+        }
+        setMapVisible(false);
+    };
+
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -373,7 +400,7 @@ export default function ReportIssueScreen() {
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.locationBtn, { backgroundColor: "#6c757d" }]}
-                                onPress={() => setMapVisible(true)}
+                                onPress={openMapSelector}
                             >
                                 <Ionicons name="map-outline" size={20} color="#fff" />
                                 <Text style={styles.btnText}>Select on Map</Text>
@@ -391,26 +418,36 @@ export default function ReportIssueScreen() {
                         {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Submit Report</Text>}
                     </TouchableOpacity>
                     
-                    {/* Map Modal with OpenStreetMap */}
                     <Modal visible={mapVisible} animationType="slide">
-                        <WebView
-                            originWhitelist={['*']}
-                            source={require('../assets/leafletMap.html')}
-                            onMessage={(event) => {
-                                const { lat, lng } = JSON.parse(event.nativeEvent.data);
-                                setLocation({ latitude: lat, longitude: lng });
-                                setMapVisible(false);
-                            }}
-                            style={{ flex: 1 }}
-                        />
-                        <TouchableOpacity
-                            style={styles.closeMapButton}
-                            onPress={() => setMapVisible(false)}
-                        >
-                            <Text style={{ color: '#fff', fontSize: 16, textAlign: 'center' }}>
-                            Close Map
-                            </Text>
-                        </TouchableOpacity>
+                        <SafeAreaView style={{ flex: 1 }}>
+                            <View style={{ flex: 1 }}>
+                                <MapView
+                                    style={styles.map}
+                                    region={mapRegion}
+                                    onRegionChangeComplete={(region) => setMapRegion(region)} // Update region as user moves map
+                                >
+                                    <UrlTile
+                                        urlTemplate={`https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`}
+                                        maximumZ={19}
+                                    />
+                                </MapView>
+
+                                {/* This is the pin that stays in the center of the screen */}
+                                <View style={styles.mapPinContainer}>
+                                    <Ionicons name="location" size={40} color="#dc3545" />
+                                </View>
+
+                                {/* These are the action buttons at the bottom */}
+                                <View style={styles.mapActionsContainer}>
+                                    <TouchableOpacity style={styles.confirmMapButton} onPress={onConfirmLocation}>
+                                        <Text style={styles.btnText}>Confirm Location</Text>
+                                    </TouchableOpacity>
+                                     <TouchableOpacity style={styles.closeMapButton} onPress={() => setMapVisible(false)}>
+                                        <Text style={styles.btnText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </SafeAreaView>
                     </Modal>
                 </View>
             </ScrollView>
@@ -434,6 +471,42 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 3,
         elevation: 3,
+    },
+    map: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    mapPinContainer: {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        marginLeft: -12, // Half the icon width (approx)
+        marginTop: -40, // The full icon height to position it above the center point
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    mapActionsContainer: {
+        position: 'absolute',
+        bottom: 30,
+        left: 20,
+        right: 20,
+    },
+    confirmMapButton: {
+        backgroundColor: "#28a745",
+        padding: 15,
+        borderRadius: 10,
+        alignItems: 'center',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 2 },
+    },
+    closeMapButton: { // Style for the new cancel button
+        backgroundColor: "#6c757d",
+        padding: 15,
+        borderRadius: 10,
+        alignItems: 'center',
+        marginTop: 10,
     },
     label: { fontSize: 18, fontWeight: "600", marginBottom: 12, color: '#343a40' },
     photoPlaceholder: {
@@ -517,15 +590,6 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.7)',
         paddingHorizontal: 6,
         borderRadius: 4
-    },
-    closeMapButton: {
-        position: 'absolute',
-        bottom: 30,
-        left: 20,
-        right: 20,
-        backgroundColor: "#dc3545",
-        padding: 15,
-        borderRadius: 10,
     },
     audioControlsContainer: {
         flexDirection: 'row',
