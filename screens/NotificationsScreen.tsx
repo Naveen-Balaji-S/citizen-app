@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
+import i18n from '../lib/i18n';
 
 export default function NotificationsScreen() {
   const [items, setItems] = useState<any[]>([]);
@@ -24,6 +25,9 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* This screen does not have any hardcoded user-facing strings to translate.
+        The content (title, body, time) is fetched dynamically from the database.
+      */}
       <FlatList
         data={items}
         keyExtractor={(item) => item.id.toString()}

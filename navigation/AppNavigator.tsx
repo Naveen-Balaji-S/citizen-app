@@ -1,7 +1,12 @@
 // navigation/AppNavigator.tsx
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
-//import ReportFormScreen from '../screens/ReportFormScreen';
+
+// Import the internationalization utility
+import i18n from '../lib/i18n';
+
+// Import all screens
+import LanguageSelectionScreen from '../screens/LanguageSelectionScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ReportIssueScreen from '../screens/ReportIssueScreen';
 import SuccessScreen from '../screens/SuccessScreen';
@@ -12,8 +17,9 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import CommunityReportsScreen from '../screens/CommunityReportsScreen';
 
-// Define the type for the screen parameters, if any. For now, it's undefined.
+// Define the type for the screen parameters
 export type RootStackParamList = {
+  LanguageSelection: undefined;
   Login: undefined;
   Register: undefined;
   Home: undefined;
@@ -29,8 +35,12 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
   return (
-    <Stack.Navigator initialRouteName="Login">
-
+    <Stack.Navigator initialRouteName="LanguageSelection">
+      <Stack.Screen
+        name="LanguageSelection"
+        component={LanguageSelectionScreen}
+        options={{ headerShown: false }}
+      />
       <Stack.Screen 
         name="Login" 
         component={LoginScreen} 
@@ -45,39 +55,39 @@ export default function AppNavigator() {
         name="Home"
         component={HomeScreen}
         options={{ 
-          title: 'Dashboard',
-          headerLeft: () => null    // 👈 hides the back arrow
+          title: i18n.t('dashboard_title'),
+          headerLeft: () => null // 👈 hides the back arrow
         }} 
       />
       <Stack.Screen
         name="ReportForm"
         component={ReportIssueScreen}
-        options={{ title: 'File a New Report' }}
+        options={{ title: i18n.t('file_new_report') }}
       />
       <Stack.Screen
         name="Success"
         component={SuccessScreen}
-        options={{ title: 'Submission Successful', headerLeft: () => null }} // Hide back button
+        options={{ title: i18n.t('success_title'), headerLeft: () => null }} // Hide back button
       />
       <Stack.Screen
         name="ViewReports"
         component={ViewReportsScreen}
-        options={{ title: 'View Past Reports' }}
+        options={{ title: i18n.t('view_reports_title') }}
       />
       <Stack.Screen
         name="Notifications"
         component={NotificationsScreen}
-        options={{ title: 'Notifications' }}
+        options={{ title: i18n.t('notifications_screen_title') }}
       />
       <Stack.Screen
         name="Leaderboard"
         component={LeaderboardScreen}
-        options={{ title: 'Leaderboard' }}
+        options={{ title: i18n.t('leaderboard_title') }}
       />
       <Stack.Screen
         name="CommunityReports"
         component={CommunityReportsScreen}
-        options={{ title: 'Community Reports' }}
+        options={{ title: i18n.t('community_reports_title') }}
       />
     </Stack.Navigator>
   );

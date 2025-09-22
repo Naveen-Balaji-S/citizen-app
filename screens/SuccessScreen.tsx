@@ -1,9 +1,9 @@
-// screens/SuccessScreen.tsx
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useNavigation , CommonActions} from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
+import i18n from '../lib/i18n'; // 👈 MODIFIED: Import i18n
 
 type SuccessScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Success'>;
 
@@ -23,10 +23,11 @@ export default function SuccessScreen() {
     // Clear the timer if the component is unmounted
     return () => clearTimeout(timer);
   }, [navigation]);
+
   return (
     <View style={styles.container}>
       <Text style={styles.text}>✅</Text>
-      <Text style={styles.text}>Report Submitted Successfully!</Text>
+      <Text style={styles.text}>{i18n.t('report_submitted_success')}</Text> {/* 👈 MODIFIED: Translated */}
     </View>
   );
 }

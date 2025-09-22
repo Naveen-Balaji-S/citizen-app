@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { 
-    View, Text, ImageBackground, StyleSheet, Alert, TouchableOpacity, 
+import {
+    View, Text, ImageBackground, StyleSheet, Alert, TouchableOpacity,
     TextInput, Modal, ScrollView, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
@@ -16,6 +16,7 @@ import { RootStackParamList } from "../navigation/AppNavigator";
 import { supabase } from '../lib/supabaseClient';
 import { decode } from 'base64-arraybuffer';
 import MapView, { UrlTile, Region } from 'react-native-maps';
+import i18n from '../lib/i18n'; // Import the i18n library
 
 // Types
 interface LocationType {
@@ -65,7 +66,10 @@ export default function ReportIssueScreen() {
     const takePhoto = async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== "granted") {
-            Alert.alert("Permission required", "Camera access is needed to take a photo.");
+            Alert.alert(
+                i18n.t('report_issue.alert_permission_required'),
+                i18n.t('report_issue.alert_camera_access_needed')
+            );
             return;
         }
         let result = await ImagePicker.launchCameraAsync({
@@ -79,7 +83,10 @@ export default function ReportIssueScreen() {
     const fetchLocation = async () => {
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
-            Alert.alert("Permission required", "Location access is needed to get your current position.");
+            Alert.alert(
+                i18n.t('report_issue.alert_permission_required'),
+                i18n.t('report_issue.alert_location_access_needed_get')
+            );
             return;
         }
         let currentLocation = await Location.getCurrentPositionAsync({});
@@ -96,7 +103,10 @@ export default function ReportIssueScreen() {
         try {
             const { status } = await Audio.requestPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert("Permission required", "Audio recording access is needed.");
+                Alert.alert(
+                    i18n.t('report_issue.alert_permission_required'),
+                    i18n.t('report_issue.alert_audio_access_needed')
+                );
                 return;
             }
             if (playbackSound) {
@@ -114,79 +124,95 @@ export default function ReportIssueScreen() {
             await newRecording.startAsync();
             setRecording(newRecording);
             setIsRecording(true);
-            Alert.alert("Recording", "Recording has started. Tap the stop icon to finish.");
+            Alert.alert(
+                i18n.t('report_issue.alert_recording_title'),
+                i18n.t('report_issue.alert_recording_started_message')
+            );
         } catch (err) {
             console.error('Failed to start recording', err);
-            Alert.alert("Recording Error", "Failed to start recording. Please try again.");
+            Alert.alert(
+                i18n.t('report_issue.alert_recording_error_title'),
+                i18n.t('report_issue.alert_failed_to_start_recording')
+            );
             setIsRecording(false);
         }
     };
 
     const stopRecording = async () => {
-    if (!recording) return;
-    setIsRecording(false);
-    try {
-        await recording.stopAndUnloadAsync();
-        
-        // This is a key step to ensure the audio session is ready for playback.
-        await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-            interruptionModeIOS: 1,
-            interruptionModeAndroid: 1,
-            shouldDuckAndroid: true,
-        });
+        if (!recording) return;
+        setIsRecording(false);
+        try {
+            await recording.stopAndUnloadAsync();
+            
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+                interruptionModeIOS: 1,
+                interruptionModeAndroid: 1,
+                shouldDuckAndroid: true,
+            });
 
-        const uri = recording.getURI();
-        setRecording(null);
-        if (uri) {
-            setRecordedAudioUri(uri);
-            Alert.alert("Recording Saved", "Audio recording has been saved.");
+            const uri = recording.getURI();
+            setRecording(null);
+            if (uri) {
+                setRecordedAudioUri(uri);
+                Alert.alert(
+                    i18n.t('report_issue.alert_recording_saved_title'),
+                    i18n.t('report_issue.alert_recording_saved_message')
+                );
+            }
+        } catch (err) {
+            console.error('Failed to stop recording', err);
+            Alert.alert(
+                i18n.t('report_issue.alert_recording_error_title'),
+                i18n.t('report_issue.alert_failed_to_stop_recording')
+            );
         }
-    } catch (err) {
-        console.error('Failed to stop recording', err);
-        Alert.alert("Recording Error", "Failed to stop recording. Please try again.");
-    }
-};
+    };
 
     const playRecordedAudio = async () => {
-    if (!recordedAudioUri) {
-        Alert.alert("No Audio", "There is no recorded audio to play.");
-        return;
-    }
+        if (!recordedAudioUri) {
+            Alert.alert(
+                i18n.t('report_issue.alert_no_audio_title'),
+                i18n.t('report_issue.alert_no_audio_message')
+            );
+            return;
+        }
 
-    if (playbackSound) {
-        await playbackSound.unloadAsync();
-        setPlaybackSound(null);
-    }
+        if (playbackSound) {
+            await playbackSound.unloadAsync();
+            setPlaybackSound(null);
+        }
 
-    try {
-        // Re-confirm playback mode just to be safe.
-        await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-            interruptionModeIOS: 1,
-            interruptionModeAndroid: 1,
-            shouldDuckAndroid: true,
-        });
+        try {
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+                interruptionModeIOS: 1,
+                interruptionModeAndroid: 1,
+                shouldDuckAndroid: true,
+            });
 
-        const { sound } = await Audio.Sound.createAsync(
-            { uri: recordedAudioUri },
-            { shouldPlay: true }
-        );
-        setPlaybackSound(sound);
+            const { sound } = await Audio.Sound.createAsync(
+                { uri: recordedAudioUri },
+                { shouldPlay: true }
+            );
+            setPlaybackSound(sound);
 
-        sound.setOnPlaybackStatusUpdate(status => {
-            if (status.isLoaded && status.didJustFinish) {
-                sound.unloadAsync();
-                setPlaybackSound(null);
-            }
-        });
-    } catch (err) {
-        console.error('Failed to play sound', err);
-        Alert.alert("Playback Error", "Failed to play the recorded audio. Check permissions and file access.");
-    }
-};
+            sound.setOnPlaybackStatusUpdate(status => {
+                if (status.isLoaded && status.didJustFinish) {
+                    sound.unloadAsync();
+                    setPlaybackSound(null);
+                }
+            });
+        } catch (err) {
+            console.error('Failed to play sound', err);
+            Alert.alert(
+                i18n.t('report_issue.alert_playback_error_title'),
+                i18n.t('report_issue.alert_playback_error_message')
+            );
+        }
+    };
 
     const deleteRecordedAudio = async () => {
         if (playbackSound) {
@@ -194,7 +220,10 @@ export default function ReportIssueScreen() {
             setPlaybackSound(null);
         }
         setRecordedAudioUri(null);
-        Alert.alert("Recording Deleted", "The recorded audio has been deleted.");
+        Alert.alert(
+            i18n.t('report_issue.alert_recording_deleted_title'),
+            i18n.t('report_issue.alert_recording_deleted_message')
+        );
     };
 
     const handleMicPress = () => {
@@ -207,12 +236,18 @@ export default function ReportIssueScreen() {
     
     const submitReport = async () => {
         if (isRecording) {
-            Alert.alert("Please wait", "Please stop the audio recording first.");
+            Alert.alert(
+                i18n.t('report_issue.alert_wait_title'),
+                i18n.t('report_issue.alert_stop_recording_first_message')
+            );
             return;
         }
 
         if (!image || departmentId === null || !location || !description.trim()) {
-            Alert.alert("Missing Information", "Please fill out all fields, including a photo, department, description, and location.");
+            Alert.alert(
+                i18n.t('report_issue.alert_missing_info_title'),
+                i18n.t('report_issue.alert_missing_info_message')
+            );
             return;
         }
         setIsSubmitting(true);
@@ -275,14 +310,17 @@ export default function ReportIssueScreen() {
 
             await supabase.from('user_notifications').insert({
                 user_id: user.id,
-                title: 'Report Submitted',
-                body: `Your report "${description}" has been submitted successfully.`,
+                title: i18n.t('report_issue.supabase_notification_title'),
+                body: i18n.t('report_issue.supabase_notification_body', { description }),
                 is_read: false,
             });
 
         } catch (error: any) {
             console.error("Submission Error:", error);
-            Alert.alert("Submission Error", error.message || "An unknown error occurred.");
+            Alert.alert(
+                i18n.t('report_issue.alert_submission_error_title'),
+                error.message || i18n.t('report_issue.alert_unknown_error_message')
+            );
         } finally {
             setIsSubmitting(false);
         }
@@ -291,21 +329,22 @@ export default function ReportIssueScreen() {
     const openMapSelector = async () => {
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
-            Alert.alert("Permission required", "Location access is needed.");
+            Alert.alert(
+                i18n.t('report_issue.alert_permission_required'),
+                i18n.t('report_issue.alert_location_access_needed')
+            );
             return;
         }
         let currentPos = await Location.getCurrentPositionAsync({});
-        // Set the initial region of the map to the user's current location
         setMapRegion({
             latitude: currentPos.coords.latitude,
             longitude: currentPos.coords.longitude,
-            latitudeDelta: 0.01, // Zoom level
-            longitudeDelta: 0.01, // Zoom level
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
         });
         setMapVisible(true);
     };
 
-    // --- NEW FUNCTION to handle confirming the location from the map modal ---
     const onConfirmLocation = () => {
         if (mapRegion) {
             setLocation({
@@ -325,11 +364,11 @@ export default function ReportIssueScreen() {
             >
             <ScrollView contentContainerStyle={styles.scrollContainer}>
                 <View style={styles.container}>
-                    <Text style={styles.title}>File a New Report</Text>
+                    <Text style={styles.title}>{i18n.t('report_issue.title')}</Text>
                     
                     {/* Photo Section */}
                     <View style={styles.card}>
-                        <Text style={styles.label}>1. Add a Photo</Text>
+                        <Text style={styles.label}>{i18n.t('report_issue.section_photo')}</Text>
                         {image?.uri ? (
                             <ImageBackground source={{ uri: image.uri }} style={styles.imagePreview} imageStyle={{ borderRadius: 10 }}>
                                 <TouchableOpacity style={styles.deleteBtn} onPress={removeImage}>
@@ -340,11 +379,11 @@ export default function ReportIssueScreen() {
                             <View style={styles.photoPlaceholder}>
                                 <TouchableOpacity style={styles.photoButton} onPress={pickImage}>
                                     <Ionicons name="images-outline" size={24} color="#007bff" />
-                                    <Text style={styles.photoButtonText}>Choose from Gallery</Text>
+                                    <Text style={styles.photoButtonText}>{i18n.t('report_issue.choose_gallery')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.photoButton} onPress={takePhoto}>
                                     <Ionicons name="camera-outline" size={24} color="#007bff" />
-                                    <Text style={styles.photoButtonText}>Take Photo</Text>
+                                    <Text style={styles.photoButtonText}>{i18n.t('report_issue.take_photo')}</Text>
                                 </TouchableOpacity>
                             </View>
                         )}
@@ -352,10 +391,10 @@ export default function ReportIssueScreen() {
                     
                     {/* Details Section */}
                     <View style={styles.card}>
-                        <Text style={styles.label}>2. Provide Details</Text>
+                        <Text style={styles.label}>{i18n.t('report_issue.section_details')}</Text>
                         <View style={styles.pickerWrapper}>
                             <Picker selectedValue={departmentId} onValueChange={(itemValue) => setDepartmentId(itemValue)}>
-                                <Picker.Item label="Select Department..." value={null} />
+                                <Picker.Item label={i18n.t('report_issue.select_department')} value={null} />
                                 {departments.map((dept) => (
                                     <Picker.Item key={dept.id} label={dept.name} value={dept.id} />
                                 ))}
@@ -364,7 +403,7 @@ export default function ReportIssueScreen() {
                         <View style={styles.descriptionContainer}>
                             <TextInput 
                                 style={styles.textInput} 
-                                placeholder="Describe the issue in detail..." 
+                                placeholder={i18n.t('report_issue.description_placeholder')}
                                 value={description} 
                                 onChangeText={setDescription} 
                                 multiline 
@@ -381,7 +420,7 @@ export default function ReportIssueScreen() {
                             <View style={styles.audioControlsContainer}>
                                 <TouchableOpacity style={styles.playButton} onPress={playRecordedAudio}>
                                     <Ionicons name="play-circle-outline" size={24} color="#fff" />
-                                    <Text style={styles.playButtonText}>Play Audio</Text>
+                                    <Text style={styles.playButtonText}>{i18n.t('report_issue.play_audio')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.deleteButton} onPress={deleteRecordedAudio}>
                                     <Ionicons name="trash-outline" size={24} color="#fff" />
@@ -392,30 +431,30 @@ export default function ReportIssueScreen() {
 
                     {/* Location Section */}
                     <View style={styles.card}>
-                        <Text style={styles.label}>3. Set Location</Text>
+                        <Text style={styles.label}>{i18n.t('report_issue.section_location')}</Text>
                         <View style={styles.locationButtons}>
                             <TouchableOpacity style={styles.locationBtn} onPress={fetchLocation}>
                                 <Ionicons name="navigate-circle-outline" size={20} color="#fff" />
-                                <Text style={styles.btnText}>Use Current Location</Text>
+                                <Text style={styles.btnText}>{i18n.t('report_issue.use_current_location')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.locationBtn, { backgroundColor: "#6c757d" }]}
                                 onPress={openMapSelector}
                             >
                                 <Ionicons name="map-outline" size={20} color="#fff" />
-                                <Text style={styles.btnText}>Select on Map</Text>
+                                <Text style={styles.btnText}>{i18n.t('report_issue.select_on_map')}</Text>
                             </TouchableOpacity>
                         </View>
                         {location && (
                             <Text style={styles.locationText}>
-                                Location selected: {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+                                {i18n.t('report_issue.location_selected', { latitude: location.latitude.toFixed(4), longitude: location.longitude.toFixed(4) })}
                             </Text>
                         )}
                     </View>
 
                     {/* Submit Button */}
                     <TouchableOpacity style={[styles.submitBtn, isSubmitting && styles.disabledBtn]} onPress={submitReport} disabled={isSubmitting}>
-                        {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Submit Report</Text>}
+                        {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>{i18n.t('report_issue.submit_report')}</Text>}
                     </TouchableOpacity>
                     
                     <Modal visible={mapVisible} animationType="slide">
@@ -424,7 +463,7 @@ export default function ReportIssueScreen() {
                                 <MapView
                                     style={styles.map}
                                     region={mapRegion}
-                                    onRegionChangeComplete={(region) => setMapRegion(region)} // Update region as user moves map
+                                    onRegionChangeComplete={(region) => setMapRegion(region)}
                                 >
                                     <UrlTile
                                         urlTemplate={`https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`}
@@ -432,18 +471,16 @@ export default function ReportIssueScreen() {
                                     />
                                 </MapView>
 
-                                {/* This is the pin that stays in the center of the screen */}
                                 <View style={styles.mapPinContainer}>
                                     <Ionicons name="location" size={40} color="#dc3545" />
                                 </View>
 
-                                {/* These are the action buttons at the bottom */}
                                 <View style={styles.mapActionsContainer}>
                                     <TouchableOpacity style={styles.confirmMapButton} onPress={onConfirmLocation}>
-                                        <Text style={styles.btnText}>Confirm Location</Text>
+                                        <Text style={styles.btnText}>{i18n.t('report_issue.confirm_location')}</Text>
                                     </TouchableOpacity>
-                                     <TouchableOpacity style={styles.closeMapButton} onPress={() => setMapVisible(false)}>
-                                        <Text style={styles.btnText}>Cancel</Text>
+                                       <TouchableOpacity style={styles.closeMapButton} onPress={() => setMapVisible(false)}>
+                                        <Text style={styles.btnText}>{i18n.t('report_issue.cancel')}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -479,8 +516,8 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: '50%',
         left: '50%',
-        marginLeft: -12, // Half the icon width (approx)
-        marginTop: -40, // The full icon height to position it above the center point
+        marginLeft: -12,
+        marginTop: -40,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -501,7 +538,7 @@ const styles = StyleSheet.create({
         shadowRadius: 3,
         shadowOffset: { width: 0, height: 2 },
     },
-    closeMapButton: { // Style for the new cancel button
+    closeMapButton: {
         backgroundColor: "#6c757d",
         padding: 15,
         borderRadius: 10,
