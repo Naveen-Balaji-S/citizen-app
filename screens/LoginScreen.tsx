@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { supabase } from '../lib/supabaseClient'; // Import the Supabase client
+import i18n from '../lib/i18n'; // Import the internationalization utility
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -14,9 +15,9 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Handles traditional email and password sign-in
-    const handleLogin = async () => {
+  const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Please enter both email and password.");
+      Alert.alert(i18n.t('error'), i18n.t('login_validation_fields'));
       return;
     }
     setIsLoading(true);
@@ -24,11 +25,11 @@ export default function LoginScreen() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       navigation.reset({
-      index: 0,
-      routes: [{ name: 'Home' }],
-    });
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
     } catch (error: any) {
-      Alert.alert("Login Failed", error.message);
+      Alert.alert(i18n.t('login_failed_title'), error.message);
     } finally {
       setIsLoading(false);
     }
@@ -42,7 +43,7 @@ export default function LoginScreen() {
     });
 
     if (error) {
-      Alert.alert('Authentication Error', error.message);
+      Alert.alert(i18n.t('auth_error_title'), error.message);
       setIsLoading(false);
     }
   }
@@ -50,18 +51,18 @@ export default function LoginScreen() {
   // Handles the password reset flow
   async function handlePasswordReset() {
     if (!email) {
-        Alert.alert("Error", "Please enter your email address in the email field to reset your password.");
-        return;
+      Alert.alert(i18n.t('error'), i18n.t('password_reset_validation'));
+      return;
     }
     setIsLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'yourapp://login' // Optional: A deep link to return the user to your app
+      redirectTo: 'yourapp://login' // Optional: A deep link to return the user to your app
     });
 
     if (error) {
-        Alert.alert("Error", error.message);
+      Alert.alert(i18n.t('error'), error.message);
     } else {
-        Alert.alert("Success", "A password reset link has been sent to your email address.");
+      Alert.alert(i18n.t('success'), i18n.t('password_reset_success'));
     }
     setIsLoading(false);
   }
@@ -69,10 +70,10 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Welcome Back</Text>
+      <Text style={styles.title}>{i18n.t('login_title')}</Text>
       <TextInput
         style={styles.input}
-        placeholder="Email"
+        placeholder={i18n.t('email_placeholder')}
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
@@ -81,7 +82,7 @@ export default function LoginScreen() {
       />
       <TextInput
         style={styles.input}
-        placeholder="Password"
+        placeholder={i18n.t('password_placeholder')}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -89,7 +90,7 @@ export default function LoginScreen() {
       />
 
       <TouchableOpacity onPress={handlePasswordReset} disabled={isLoading}>
-        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+        <Text style={styles.forgotPasswordText}>{i18n.t('forgot_password')}</Text>
       </TouchableOpacity>
 
       {isLoading ? (
@@ -97,14 +98,14 @@ export default function LoginScreen() {
       ) : (
         <>
           <View style={styles.buttonWrapper}>
-            <Button title="Login" onPress={handleLogin} color="#007bff" />
+            <Button title={i18n.t('login_button')} onPress={handleLogin} color="#007bff" />
           </View>
           
-          <Text style={styles.orText}>or</Text>
+          <Text style={styles.orText}>{i18n.t('or')}</Text>
 
           <View style={styles.buttonWrapper}>
             <Button 
-              title="Sign in with Google" 
+              title={i18n.t('sign_in_google')} 
               onPress={signInWithGoogle} 
               color="#4285F4" 
             />
@@ -112,7 +113,7 @@ export default function LoginScreen() {
           
           <View style={styles.signUpWrapper}>
             <Button
-              title="Don't have an account? Sign Up"
+              title={i18n.t('signup_prompt')}
               onPress={() => navigation.navigate('Register')}
               color="#6c757d"
             />
@@ -167,4 +168,3 @@ const styles = StyleSheet.create({
     fontSize: 15,
   }
 });
-

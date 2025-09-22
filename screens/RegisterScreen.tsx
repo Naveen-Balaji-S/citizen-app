@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { supabase } from '../lib/supabaseClient'; // Import the Supabase client
+import i18n from '../lib/i18n'; // Import the internationalization utility
 
 type RegisterScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Register'>;
 
@@ -15,7 +16,7 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Please enter both email and password.");
+      Alert.alert(i18n.t('error'), i18n.t('login_validation_fields'));
       return;
     }
     setIsLoading(true);
@@ -31,12 +32,12 @@ export default function RegisterScreen() {
       if (error) throw error;
       
       Alert.alert(
-        "Success",
-        "Your account has been created! Please check your email for a confirmation link to complete registration.",
-        [{ text: "OK", onPress: () => navigation.navigate('Login') }]
+        i18n.t('success'),
+        i18n.t('registration_success_message'),
+        [{ text: i18n.t('ok'), onPress: () => navigation.navigate('Login') }]
       );
     } catch (error: any) {
-      Alert.alert("Registration Failed", error.message);
+      Alert.alert(i18n.t('registration_failed_title'), error.message);
     } finally {
       setIsLoading(false);
     }
@@ -44,10 +45,10 @@ export default function RegisterScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Create an Account</Text>
+      <Text style={styles.title}>{i18n.t('register_title')}</Text>
       <TextInput 
         style={styles.input} 
-        placeholder="Email" 
+        placeholder={i18n.t('email_placeholder')}
         value={email} 
         onChangeText={setEmail} 
         keyboardType="email-address" 
@@ -56,7 +57,7 @@ export default function RegisterScreen() {
       />
       <TextInput 
         style={styles.input} 
-        placeholder="Password" 
+        placeholder={i18n.t('password_placeholder')}
         value={password} 
         onChangeText={setPassword} 
         secureTextEntry 
@@ -68,11 +69,11 @@ export default function RegisterScreen() {
       ) : (
         <>
           <View style={styles.buttonWrapper}>
-            <Button title="Register" onPress={handleRegister} color="#28a745" />
+            <Button title={i18n.t('register_button')} onPress={handleRegister} color="#28a745" />
           </View>
           <View style={styles.loginWrapper}>
             <Button
-              title="Already have an account? Login"
+              title={i18n.t('login_prompt')}
               onPress={() => navigation.navigate('Login')}
               color="#6c757d"
             />

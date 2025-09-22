@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState,useRef } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator, FlatList, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { supabase } from '../lib/supabaseClient';
 import { User } from '@supabase/supabase-js';
+import i18n from '../lib/i18n';
 
 // --- Type Definitions ---
 type Report = {
@@ -21,6 +22,10 @@ type Department = { id: number; name: string; };
 const ReportListItem = ({ report, currentUser }: { report: Report, currentUser: User | null }) => {
     const [isUpvoted, setIsUpvoted] = useState(false);
     const [loadingUpvoteStatus, setLoadingUpvoteStatus] = useState(true);
+    const [optimisticCount, setOptimisticCount] = useState(report.upvote_count);
+    const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+    const isInitialMount = useRef(true);
+
 
     useEffect(() => {
         if (!currentUser) { setLoadingUpvoteStatus(false); return; }
@@ -35,8 +40,38 @@ const ReportListItem = ({ report, currentUser }: { report: Report, currentUser: 
         checkUpvoteStatus();
     }, [currentUser, report.report_id]);
 
+    useEffect(() => {
+        if (isInitialMount.current) { isInitialMount.current = false; return; }
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => syncUpvoteState(), 1000);
+        return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+    }, [isUpvoted]);
+
+    const syncUpvoteState = async () => {
+        if (!currentUser) return;
+        const action = isUpvoted
+            ? supabase.from('report_upvotes').insert({ report_id: report.report_id, user_id: currentUser.id })
+            : supabase.from('report_upvotes').delete().match({ report_id: report.report_id, user_id: currentUser.id });
+        
+        const { error } = await action;
+        if (error) {
+            Alert.alert(i18n.t('error'), i18n.t('upvote_sync_error'));
+            setIsUpvoted(currentValue => !currentValue);
+            setOptimisticCount(currentValue => isUpvoted ? currentValue - 1 : currentValue + 1);
+        }
+    };
+
+    const handleUpvotePress = () => {
+        if (currentUser?.id === report.user_id) {
+            Alert.alert(i18n.t('action_not_allowed'), i18n.t('cannot_upvote_own_report'));
+            return;
+        }
+        setOptimisticCount(currentValue => isUpvoted ? currentValue - 1 : currentValue + 1);
+        setIsUpvoted(currentValue => !currentValue);
+    };
+
     const handleUpvote = async () => {
-        if (!currentUser) { Alert.alert("Please log in to upvote."); return; }
+        if (!currentUser) { Alert.alert(i18n.t('error'), i18n.t('login_to_upvote')); return; }
 
         const action = isUpvoted
             ? supabase.from('report_upvotes').delete().match({ report_id: report.report_id, user_id: currentUser.id })
@@ -50,10 +85,10 @@ const ReportListItem = ({ report, currentUser }: { report: Report, currentUser: 
         <View style={styles.itemContainer}>
             <View style={{ flex: 1 }}>
                 <Text style={styles.descriptionText}>{report.description}</Text>
-                {report.upvote_count > 0 && <Text style={styles.countText}>{report.upvote_count} upvotes</Text>}
+                {(optimisticCount > 0) && <Text style={styles.countText}>{i18n.t('upvotes', { count: optimisticCount })}</Text>}
             </View>
-            <TouchableOpacity style={[styles.upvoteButton, isUpvoted && styles.upvotedButton]} onPress={handleUpvote} disabled={loadingUpvoteStatus}>
-                {loadingUpvoteStatus ? <ActivityIndicator size="small" /> : <Text style={[styles.upvoteText, isUpvoted && { color: '#fff' }]}>👍 Upvote</Text>}
+            <TouchableOpacity style={[styles.upvoteButton, isUpvoted && styles.upvotedButton]} onPress={handleUpvotePress} disabled={loadingUpvoteStatus}>
+                {loadingUpvoteStatus ? <ActivityIndicator size="small" /> : <Text style={[styles.upvoteText, isUpvoted && { color: '#fff' }]}>{i18n.t('upvote_button')}</Text>}
             </TouchableOpacity>
         </View>
     );
@@ -82,7 +117,7 @@ export default function CommunityReportsScreen() {
                 const { data: reportData } = await supabase
                     .from('reports')
                     .select('report_id, description, user_id, upvote_count, department_id')
-                    .neq('user_id', user.id) // <-- KEY CHANGE HERE
+                    .neq('user_id', user.id)
                     .order('created_at', { ascending: false })
                     .limit(100);
                 
@@ -101,7 +136,7 @@ export default function CommunityReportsScreen() {
         if (selectedDeptId === 'all') {
             setFilteredReports(reports);
         } else {
-            setFilteredReports(reports.filter(r => r.department_id === selectedDeptId));
+            setFilteredReports(reports.filter((r: Report) => r.department_id === selectedDeptId));
         }
     }, [selectedDeptId, reports]);
 
@@ -115,7 +150,7 @@ export default function CommunityReportsScreen() {
                 <View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
                     <TouchableOpacity style={[styles.filterButton, selectedDeptId === 'all' && styles.activeFilterButton]} onPress={() => setSelectedDeptId('all')}>
-                        <Text style={[styles.filterText, selectedDeptId === 'all' && styles.activeFilterText]}>All</Text>
+                        <Text style={[styles.filterText, selectedDeptId === 'all' && styles.activeFilterText]}>{i18n.t('all_departments')}</Text>
                     </TouchableOpacity>
                     {departments.map(dept => (
                         <TouchableOpacity key={dept.id} style={[styles.filterButton, selectedDeptId === dept.id && styles.activeFilterButton]} onPress={() => setSelectedDeptId(dept.id)}>
