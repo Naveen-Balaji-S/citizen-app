@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useFocusEffect } from '@react-navigation/native';
-import i18n from '../lib/i18n'; // 👈 MODIFIED: Import i18n
+import { useTranslation } from 'react-i18next'; // 👈 MODIFIED: Import useTranslation
 
 // This is the TypeScript type for a single report object from your database
 interface Report {
@@ -18,13 +18,14 @@ interface Report {
 }
 
 // Map status to badge background and text color
-const getStatusColors = (status: string) => {
+// This function now accepts the 't' function as an argument
+const getStatusColors = (status: string, t: any) => {
     switch (status) {
-        case i18n.t('status_submitted'):
+        case t('status_submitted'):
             return { bg: '#cce5ff', text: '#004085' };
-        case i18n.t('status_acknowledged'):
+        case t('status_acknowledged'):
             return { bg: '#fff3cd', text: '#856404' };
-        case i18n.t('status_completed'):
+        case t('status_completed'):
             return { bg: '#d4edda', text: '#155724' };
         default:
             return { bg: '#e2e3e5', text: '#6c757d' };
@@ -33,8 +34,9 @@ const getStatusColors = (status: string) => {
 
 // This is a small component to render one report item in the list
 const ReportItem = ({ item }: { item: Report }) => {
-    const statusTranslated = i18n.t('status_' + item.status.toLowerCase()); // 👈 MODIFIED: Translated status
-    const colors = getStatusColors(statusTranslated); // 👈 MODIFIED: Use translated status for colors
+    const { t } = useTranslation(); // 👈 MODIFIED: Use the hook
+    const statusTranslated = t('status_' + item.status.toLowerCase());
+    const colors = getStatusColors(statusTranslated, t); // 👈 MODIFIED: Pass 't' to the function
 
     return (
         <View style={styles.itemContainer}>
@@ -47,7 +49,7 @@ const ReportItem = ({ item }: { item: Report }) => {
                 <Text style={styles.department}>{item.department?.name || 'N/A'}</Text>
                 <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
                 <View style={styles.statusContainer}>
-                    <Text style={styles.statusLabel}>{i18n.t('status_label')}</Text> {/* 👈 MODIFIED: Translated */}
+                    <Text style={styles.statusLabel}>{t('status_label')}</Text> {/* 👈 MODIFIED: Translated */}
                     <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
                         <Text style={[styles.statusText, { color: colors.text }]}>
                             {statusTranslated}
@@ -55,7 +57,7 @@ const ReportItem = ({ item }: { item: Report }) => {
                     </View>
                 </View>
                 <Text style={styles.date}>
-                    {i18n.t('reported_on')}: {new Date(item.created_at).toLocaleDateString()} {/* 👈 MODIFIED: Translated */}
+                    {t('reported_on')}: {new Date(item.created_at).toLocaleDateString()} {/* 👈 MODIFIED: Translated */}
                 </Text>
             </View>
         </View>
@@ -63,6 +65,7 @@ const ReportItem = ({ item }: { item: Report }) => {
 };
 
 export default function ViewReportsScreen() {
+    const { t } = useTranslation(); // 👈 MODIFIED: Use the hook
     const [reports, setReports] = useState<Report[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -98,8 +101,8 @@ export default function ViewReportsScreen() {
                 }
 
                 // Make sure the status is one of the known translated keys before saving to state
-                const translatedStatus = i18n.t(`status_${report.status.toLowerCase()}` as any);
-                const finalStatus = translatedStatus.startsWith('status_') ? i18n.t('status_unknown') : translatedStatus;
+                const translatedStatus = t(`status_${report.status.toLowerCase()}` as any);
+                const finalStatus = translatedStatus.startsWith('status_') ? t('status_unknown') : translatedStatus;
 
                 return {
                     ...report,
@@ -111,7 +114,7 @@ export default function ViewReportsScreen() {
             setReports(reportsData);
 
         } catch (err: any) {
-            Alert.alert(i18n.t('error'), i18n.t('fetch_reports_error')); // 👈 MODIFIED: Translated alert
+            Alert.alert(t('error'), t('fetch_reports_error')); // 👈 MODIFIED: Translated alert
         } finally {
             setIsLoading(false);
             setRefreshing(false);
@@ -149,7 +152,7 @@ export default function ViewReportsScreen() {
         return (
             <View style={[styles.container, styles.center]}>
                 <ActivityIndicator size="large" color="#007bff" />
-                <Text style={styles.loadingText}>{i18n.t('loading_reports')}</Text> {/* 👈 MODIFIED: Translated */}
+                <Text style={styles.loadingText}>{t('loading_reports')}</Text> {/* 👈 MODIFIED: Translated */}
             </View>
         );
     }
@@ -157,7 +160,7 @@ export default function ViewReportsScreen() {
     return (
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
-                <Text style={styles.title}>{i18n.t('view_reports_title')}</Text> {/* 👈 MODIFIED: Translated */}
+                <Text style={styles.title}>{t('view_reports_title')}</Text> {/* 👈 MODIFIED: Translated */}
                 <FlatList
                     data={reports}
                     renderItem={({ item }) => <ReportItem item={item} />}
@@ -165,7 +168,7 @@ export default function ViewReportsScreen() {
                     contentContainerStyle={{ paddingBottom: 20 }}
                     ListEmptyComponent={
                         <View style={styles.center}>
-                            <Text style={styles.emptyText}>{i18n.t('no_reports_yet')}</Text> {/* 👈 MODIFIED: Translated */}
+                            <Text style={styles.emptyText}>{t('no_reports_yet')}</Text> {/* 👈 MODIFIED: Translated */}
                         </View>
                     }
                     refreshControl={

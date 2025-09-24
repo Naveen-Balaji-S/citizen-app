@@ -16,7 +16,7 @@ import { RootStackParamList } from "../navigation/AppNavigator";
 import { supabase } from '../lib/supabaseClient';
 import { decode } from 'base64-arraybuffer';
 import MapView, { UrlTile, Region } from 'react-native-maps';
-import i18n from '../lib/i18n'; // Import the i18n library
+import { useTranslation } from 'react-i18next';
 
 // Types
 interface LocationType {
@@ -27,6 +27,7 @@ interface LocationType {
 type ReportIssueScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ReportForm'>;
 
 export default function ReportIssueScreen() {
+    const { t } = useTranslation();
     const [image, setImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
     const [departmentId, setDepartmentId] = useState<number | null>(null);
     const [location, setLocation] = useState<LocationType | null>(null);
@@ -67,8 +68,8 @@ export default function ReportIssueScreen() {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== "granted") {
             Alert.alert(
-                i18n.t('report_issue.alert_permission_required'),
-                i18n.t('report_issue.alert_camera_access_needed')
+                t('report_issue.alert_permission_required'),
+                t('report_issue.alert_camera_access_needed')
             );
             return;
         }
@@ -84,8 +85,8 @@ export default function ReportIssueScreen() {
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
             Alert.alert(
-                i18n.t('report_issue.alert_permission_required'),
-                i18n.t('report_issue.alert_location_access_needed_get')
+                t('report_issue.alert_permission_required'),
+                t('report_issue.alert_location_access_needed_get')
             );
             return;
         }
@@ -104,8 +105,8 @@ export default function ReportIssueScreen() {
             const { status } = await Audio.requestPermissionsAsync();
             if (status !== 'granted') {
                 Alert.alert(
-                    i18n.t('report_issue.alert_permission_required'),
-                    i18n.t('report_issue.alert_audio_access_needed')
+                    t('report_issue.alert_permission_required'),
+                    t('report_issue.alert_audio_access_needed')
                 );
                 return;
             }
@@ -125,14 +126,14 @@ export default function ReportIssueScreen() {
             setRecording(newRecording);
             setIsRecording(true);
             Alert.alert(
-                i18n.t('report_issue.alert_recording_title'),
-                i18n.t('report_issue.alert_recording_started_message')
+                t('report_issue.alert_recording_title'),
+                t('report_issue.alert_recording_started_message')
             );
         } catch (err) {
             console.error('Failed to start recording', err);
             Alert.alert(
-                i18n.t('report_issue.alert_recording_error_title'),
-                i18n.t('report_issue.alert_failed_to_start_recording')
+                t('report_issue.alert_recording_error_title'),
+                t('report_issue.alert_failed_to_start_recording')
             );
             setIsRecording(false);
         }
@@ -157,15 +158,15 @@ export default function ReportIssueScreen() {
             if (uri) {
                 setRecordedAudioUri(uri);
                 Alert.alert(
-                    i18n.t('report_issue.alert_recording_saved_title'),
-                    i18n.t('report_issue.alert_recording_saved_message')
+                    t('report_issue.alert_recording_saved_title'),
+                    t('report_issue.alert_recording_saved_message')
                 );
             }
         } catch (err) {
             console.error('Failed to stop recording', err);
             Alert.alert(
-                i18n.t('report_issue.alert_recording_error_title'),
-                i18n.t('report_issue.alert_failed_to_stop_recording')
+                t('report_issue.alert_recording_error_title'),
+                t('report_issue.alert_failed_to_stop_recording')
             );
         }
     };
@@ -173,8 +174,8 @@ export default function ReportIssueScreen() {
     const playRecordedAudio = async () => {
         if (!recordedAudioUri) {
             Alert.alert(
-                i18n.t('report_issue.alert_no_audio_title'),
-                i18n.t('report_issue.alert_no_audio_message')
+                t('report_issue.alert_no_audio_title'),
+                t('report_issue.alert_no_audio_message')
             );
             return;
         }
@@ -208,8 +209,8 @@ export default function ReportIssueScreen() {
         } catch (err) {
             console.error('Failed to play sound', err);
             Alert.alert(
-                i18n.t('report_issue.alert_playback_error_title'),
-                i18n.t('report_issue.alert_playback_error_message')
+                t('report_issue.alert_playback_error_title'),
+                t('report_issue.alert_playback_error_message')
             );
         }
     };
@@ -221,8 +222,8 @@ export default function ReportIssueScreen() {
         }
         setRecordedAudioUri(null);
         Alert.alert(
-            i18n.t('report_issue.alert_recording_deleted_title'),
-            i18n.t('report_issue.alert_recording_deleted_message')
+            t('report_issue.alert_recording_deleted_title'),
+            t('report_issue.alert_recording_deleted_message')
         );
     };
 
@@ -237,16 +238,16 @@ export default function ReportIssueScreen() {
     const submitReport = async () => {
         if (isRecording) {
             Alert.alert(
-                i18n.t('report_issue.alert_wait_title'),
-                i18n.t('report_issue.alert_stop_recording_first_message')
+                t('report_issue.alert_wait_title'),
+                t('report_issue.alert_stop_recording_first_message')
             );
             return;
         }
 
         if (!image || departmentId === null || !location || !description.trim()) {
             Alert.alert(
-                i18n.t('report_issue.alert_missing_info_title'),
-                i18n.t('report_issue.alert_missing_info_message')
+                t('report_issue.alert_missing_info_title'),
+                t('report_issue.alert_missing_info_message')
             );
             return;
         }
@@ -310,16 +311,16 @@ export default function ReportIssueScreen() {
 
             await supabase.from('user_notifications').insert({
                 user_id: user.id,
-                title: i18n.t('report_issue.supabase_notification_title'),
-                body: i18n.t('report_issue.supabase_notification_body', { description }),
+                title: t('report_issue.supabase_notification_title'),
+                body: t('report_issue.supabase_notification_body', { description }),
                 is_read: false,
             });
 
         } catch (error: any) {
             console.error("Submission Error:", error);
             Alert.alert(
-                i18n.t('report_issue.alert_submission_error_title'),
-                error.message || i18n.t('report_issue.alert_unknown_error_message')
+                t('report_issue.alert_submission_error_title'),
+                error.message || t('report_issue.alert_unknown_error_message')
             );
         } finally {
             setIsSubmitting(false);
@@ -330,8 +331,8 @@ export default function ReportIssueScreen() {
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== "granted") {
             Alert.alert(
-                i18n.t('report_issue.alert_permission_required'),
-                i18n.t('report_issue.alert_location_access_needed')
+                t('report_issue.alert_permission_required'),
+                t('report_issue.alert_location_access_needed')
             );
             return;
         }
@@ -364,11 +365,11 @@ export default function ReportIssueScreen() {
             >
             <ScrollView contentContainerStyle={styles.scrollContainer}>
                 <View style={styles.container}>
-                    <Text style={styles.title}>{i18n.t('report_issue.title')}</Text>
+                    <Text style={styles.title}>{t('report_issue.title')}</Text>
                     
                     {/* Photo Section */}
                     <View style={styles.card}>
-                        <Text style={styles.label}>{i18n.t('report_issue.section_photo')}</Text>
+                        <Text style={styles.label}>{t('report_issue.section_photo')}</Text>
                         {image?.uri ? (
                             <ImageBackground source={{ uri: image.uri }} style={styles.imagePreview} imageStyle={{ borderRadius: 10 }}>
                                 <TouchableOpacity style={styles.deleteBtn} onPress={removeImage}>
@@ -379,11 +380,11 @@ export default function ReportIssueScreen() {
                             <View style={styles.photoPlaceholder}>
                                 <TouchableOpacity style={styles.photoButton} onPress={pickImage}>
                                     <Ionicons name="images-outline" size={24} color="#007bff" />
-                                    <Text style={styles.photoButtonText}>{i18n.t('report_issue.choose_gallery')}</Text>
+                                    <Text style={styles.photoButtonText}>{t('report_issue.choose_gallery')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.photoButton} onPress={takePhoto}>
                                     <Ionicons name="camera-outline" size={24} color="#007bff" />
-                                    <Text style={styles.photoButtonText}>{i18n.t('report_issue.take_photo')}</Text>
+                                    <Text style={styles.photoButtonText}>{t('report_issue.take_photo')}</Text>
                                 </TouchableOpacity>
                             </View>
                         )}
@@ -391,10 +392,10 @@ export default function ReportIssueScreen() {
                     
                     {/* Details Section */}
                     <View style={styles.card}>
-                        <Text style={styles.label}>{i18n.t('report_issue.section_details')}</Text>
+                        <Text style={styles.label}>{t('report_issue.section_details')}</Text>
                         <View style={styles.pickerWrapper}>
                             <Picker selectedValue={departmentId} onValueChange={(itemValue) => setDepartmentId(itemValue)}>
-                                <Picker.Item label={i18n.t('report_issue.select_department')} value={null} />
+                                <Picker.Item label={t('report_issue.select_department')} value={null} />
                                 {departments.map((dept) => (
                                     <Picker.Item key={dept.id} label={dept.name} value={dept.id} />
                                 ))}
@@ -403,7 +404,7 @@ export default function ReportIssueScreen() {
                         <View style={styles.descriptionContainer}>
                             <TextInput 
                                 style={styles.textInput} 
-                                placeholder={i18n.t('report_issue.description_placeholder')}
+                                placeholder={t('report_issue.description_placeholder')}
                                 value={description} 
                                 onChangeText={setDescription} 
                                 multiline 
@@ -420,7 +421,7 @@ export default function ReportIssueScreen() {
                             <View style={styles.audioControlsContainer}>
                                 <TouchableOpacity style={styles.playButton} onPress={playRecordedAudio}>
                                     <Ionicons name="play-circle-outline" size={24} color="#fff" />
-                                    <Text style={styles.playButtonText}>{i18n.t('report_issue.play_audio')}</Text>
+                                    <Text style={styles.playButtonText}>{t('report_issue.play_audio')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.deleteButton} onPress={deleteRecordedAudio}>
                                     <Ionicons name="trash-outline" size={24} color="#fff" />
@@ -431,30 +432,30 @@ export default function ReportIssueScreen() {
 
                     {/* Location Section */}
                     <View style={styles.card}>
-                        <Text style={styles.label}>{i18n.t('report_issue.section_location')}</Text>
+                        <Text style={styles.label}>{t('report_issue.section_location')}</Text>
                         <View style={styles.locationButtons}>
                             <TouchableOpacity style={styles.locationBtn} onPress={fetchLocation}>
                                 <Ionicons name="navigate-circle-outline" size={20} color="#fff" />
-                                <Text style={styles.btnText}>{i18n.t('report_issue.use_current_location')}</Text>
+                                <Text style={styles.btnText}>{t('report_issue.use_current_location')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.locationBtn, { backgroundColor: "#6c757d" }]}
                                 onPress={openMapSelector}
                             >
                                 <Ionicons name="map-outline" size={20} color="#fff" />
-                                <Text style={styles.btnText}>{i18n.t('report_issue.select_on_map')}</Text>
+                                <Text style={styles.btnText}>{t('report_issue.select_on_map')}</Text>
                             </TouchableOpacity>
                         </View>
                         {location && (
                             <Text style={styles.locationText}>
-                                {i18n.t('report_issue.location_selected', { latitude: location.latitude.toFixed(4), longitude: location.longitude.toFixed(4) })}
+                                {t('report_issue.location_selected', { latitude: location.latitude.toFixed(4), longitude: location.longitude.toFixed(4) })}
                             </Text>
                         )}
                     </View>
 
                     {/* Submit Button */}
                     <TouchableOpacity style={[styles.submitBtn, isSubmitting && styles.disabledBtn]} onPress={submitReport} disabled={isSubmitting}>
-                        {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>{i18n.t('report_issue.submit_report')}</Text>}
+                        {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>{t('report_issue.submit_report')}</Text>}
                     </TouchableOpacity>
                     
                     <Modal visible={mapVisible} animationType="slide">
@@ -477,10 +478,10 @@ export default function ReportIssueScreen() {
 
                                 <View style={styles.mapActionsContainer}>
                                     <TouchableOpacity style={styles.confirmMapButton} onPress={onConfirmLocation}>
-                                        <Text style={styles.btnText}>{i18n.t('report_issue.confirm_location')}</Text>
+                                        <Text style={styles.btnText}>{t('report_issue.confirm_location')}</Text>
                                     </TouchableOpacity>
-                                       <TouchableOpacity style={styles.closeMapButton} onPress={() => setMapVisible(false)}>
-                                        <Text style={styles.btnText}>{i18n.t('report_issue.cancel')}</Text>
+                                        <TouchableOpacity style={styles.closeMapButton} onPress={() => setMapVisible(false)}>
+                                        <Text style={styles.btnText}>{t('report_issue.cancel')}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>

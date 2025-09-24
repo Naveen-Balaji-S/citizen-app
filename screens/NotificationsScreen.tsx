@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
-import i18n from '../lib/i18n';
+import { useTranslation } from 'react-i18next';
 
 export default function NotificationsScreen() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<any[]>([]);
 
   useEffect(() => {
@@ -25,9 +26,9 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* This screen does not have any hardcoded user-facing strings to translate.
-        The content (title, body, time) is fetched dynamically from the database.
-      */}
+      <Text style={styles.screenTitle}>{t('notifications_screen_title')}</Text>
+      
+      {/* The content (title, body, time) is fetched dynamically from the database. */}
       <FlatList
         data={items}
         keyExtractor={(item) => item.id.toString()}
@@ -46,9 +47,36 @@ export default function NotificationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f2f5', padding: 16 },
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 12 },
-  title: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
-  body: { fontSize: 14, color: '#555' },
-  time: { fontSize: 12, color: '#888', marginTop: 4 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#f0f2f5', 
+    padding: 16 
+  },
+  screenTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  card: { 
+    backgroundColor: '#fff', 
+    padding: 16, 
+    borderRadius: 12, 
+    marginBottom: 12 
+  },
+  title: { 
+    fontSize: 16, 
+    fontWeight: 'bold', 
+    marginBottom: 4 
+  },
+  body: { 
+    fontSize: 14, 
+    color: '#555' 
+  },
+  time: { 
+    fontSize: 12, 
+    color: '#888', 
+    marginTop: 4 
+  },
 });

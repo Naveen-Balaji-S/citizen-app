@@ -19,11 +19,12 @@ import usePushTokens from '../hooks/usePushToken';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Location from 'expo-location';
 import MapView, { Marker, Circle } from 'react-native-maps';
-import i18n from '../lib/i18n';
+import { useTranslation } from 'react-i18next';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,7 +61,7 @@ export default function HomeScreen() {
     const fetchLocationAndReports = async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(i18n.t('permission_required_title'), i18n.t('location_permission_message'));
+        Alert.alert(t('permission_required_title'), t('location_permission_message'));
         setLoading(false);
         return;
       }
@@ -127,8 +128,8 @@ export default function HomeScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.welcomeTitle}>{i18n.t('dashboard_title')}</Text>
-            <Text style={styles.pointsText}>🏆 {i18n.t('civic_points_label', { points: civicPoints })}</Text>
+            <Text style={styles.welcomeTitle}>{t('dashboard_title')}</Text>
+            <Text style={styles.pointsText}>🏆 {t('civic_points_label', { points: civicPoints })}</Text>
           </View>
 
           <View style={styles.iconRow}>
@@ -136,7 +137,7 @@ export default function HomeScreen() {
               <Ionicons name="notifications-outline" size={26} color="#1c1c1e" />
               {unreadCount > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} onPress={() => user && Alert.alert(i18n.t('logged_in_as'), user.email!)}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => user && Alert.alert(t('logged_in_as'), user.email!)}>
               <Ionicons name="person-circle-outline" size={30} color="#1c1c1e" />
             </TouchableOpacity>
           </View>
@@ -159,7 +160,7 @@ export default function HomeScreen() {
                   latitude: userLocation.coords.latitude,
                   longitude: userLocation.coords.longitude,
                 }}
-                title={i18n.t('your_location_marker')}
+                title={t('your_location_marker')}
                 pinColor="#007bff"
               />
               <Circle
@@ -182,27 +183,27 @@ export default function HomeScreen() {
               ))}
             </MapView>
           ) : (
-            <Text style={styles.mapText}>{i18n.t('fetching_location_reports')}</Text>
+            <Text style={styles.mapText}>{t('fetching_location_reports')}</Text>
           )}
         </View>
 
         <View style={styles.cardContainer}>
           <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('ReportForm')}>
-            <Text style={styles.cardIcon}>📝</Text><Text style={styles.cardTitle}>{i18n.t('file_new_report')}</Text>
+            <Text style={styles.cardIcon}>📝</Text><Text style={styles.cardTitle}>{t('file_new_report')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('ViewReports')}>
-            <Text style={styles.cardIcon}>📂</Text><Text style={styles.cardTitle}>{i18n.t('my_reports_card')}</Text>
+            <Text style={styles.cardIcon}>📂</Text><Text style={styles.cardTitle}>{t('my_reports_card')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('CommunityReports')}>
-            <Text style={styles.cardIcon}>👥</Text><Text style={styles.cardTitle}>{i18n.t('community_reports_card')}</Text>
+            <Text style={styles.cardIcon}>👥</Text><Text style={styles.cardTitle}>{t('community_reports_card')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Leaderboard')}>
-            <Text style={styles.cardIcon}>🏆</Text><Text style={styles.cardTitle}>{i18n.t('leaderboard_card')}</Text>
+            <Text style={styles.cardIcon}>🏆</Text><Text style={styles.cardTitle}>{t('leaderboard_card')}</Text>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>{i18n.t('logout_button')}</Text>
+          <Text style={styles.logoutButtonText}>{t('logout_button')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
