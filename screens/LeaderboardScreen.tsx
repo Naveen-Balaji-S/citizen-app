@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { supabase } from '../lib/supabaseClient';
-import i18n from '../lib/i18n';
+import { useTranslation } from 'react-i18next';
 
 // Define the navigation prop type for this screen
 type LeaderboardScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Leaderboard'>;
@@ -17,6 +17,7 @@ type LeaderboardEntry = {
 };
 
 export default function LeaderboardScreen() {
+    const { t } = useTranslation();
     const navigation = useNavigation<LeaderboardScreenNavigationProp>();
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -35,7 +36,7 @@ export default function LeaderboardScreen() {
                 if (data) setLeaderboard(data);
 
             } catch (err: any) {
-                setError(i18n.t('leaderboard_load_failed') || err.message);
+                setError(t('leaderboard_load_failed') || err.message);
             } finally {
                 setLoading(false);
             }
@@ -51,7 +52,7 @@ export default function LeaderboardScreen() {
                 <Text style={styles.rankText}>{index + 1}</Text>
             </View>
             <Text style={styles.emailText}>{item.name || item.email}</Text>
-            <Text style={styles.pointsText}>{item.civic_points} {i18n.t('points_unit')}</Text>
+            <Text style={styles.pointsText}>{item.civic_points} {t('points_unit')}</Text>
         </View>
     );
 
@@ -66,7 +67,7 @@ export default function LeaderboardScreen() {
     if (error) {
         return (
             <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={styles.errorText}>{i18n.t('leaderboard_load_failed')}</Text>
+                <Text style={styles.errorText}>{t('leaderboard_load_failed')}</Text>
                 <Text style={styles.errorText}>{error}</Text>
             </SafeAreaView>
         );
@@ -76,7 +77,7 @@ export default function LeaderboardScreen() {
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
                 <View style={styles.header}>
-                    <Text style={styles.title}>{i18n.t('top_contributors')}</Text>
+                    <Text style={styles.title}>{t('top_contributors')}</Text>
                     <View style={{ width: 40 }} /> {/* Spacer */}
                 </View>
 
