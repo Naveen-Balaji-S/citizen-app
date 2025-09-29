@@ -8,13 +8,14 @@ import i18n from '../lib/i18n';
 // Import all screens
 import HomeScreen from '../screens/HomeScreen';
 import ReportIssueScreen from '../screens/ReportIssueScreen';
-import SuccessScreen from '../screens/SuccessScreen';
 import ViewReportsScreen from '../screens/ViewReportsScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import CommunityReportsScreen from '../screens/CommunityReportsScreen';
+import * as ScreenCapture from 'expo-screen-capture';
+import DraftsScreen from '../screens/DraftsScreen';
 
 // Define the parameter lists for the separate stacks
 export type AuthStackParamList = {
@@ -24,12 +25,12 @@ export type AuthStackParamList = {
 
 export type MainStackParamList = {
   Home: undefined;
-  ReportForm: undefined;
-  Success: undefined;
+  ReportForm?: { draft?: any };
   ViewReports: undefined;
   Notifications: undefined;
   Leaderboard: undefined;
   CommunityReports: undefined;
+  Drafts: undefined;
 };
 
 export type RootStackParamList = AuthStackParamList & MainStackParamList;
@@ -61,11 +62,6 @@ const MainNavigator = () => (
       options={{ title: i18n.t('file_new_report') }}
     />
     <MainStack.Screen
-      name="Success"
-      component={SuccessScreen}
-      options={{ title: i18n.t('success_title'), headerLeft: () => null }}
-    />
-    <MainStack.Screen
       name="ViewReports"
       component={ViewReportsScreen}
       options={{ title: i18n.t('view_reports_title') }}
@@ -85,12 +81,24 @@ const MainNavigator = () => (
       component={CommunityReportsScreen}
       options={{ title: i18n.t('community_reports_title') }}
     />
+    <MainStack.Screen
+      name="Drafts"
+      component={DraftsScreen}
+      options={{ title: i18n.t('drafts.title') }}
+    />
   </MainStack.Navigator>
 );
 
 export default function AppNavigator() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    const enableScreenCapture = async () => {
+      await ScreenCapture.allowScreenCaptureAsync();
+    };
+    enableScreenCapture();
+  }, []);
 
   useEffect(() => {
     // This listener checks for a valid session and updates the state
