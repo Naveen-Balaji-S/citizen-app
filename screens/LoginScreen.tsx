@@ -4,34 +4,55 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { supabase } from '../lib/supabaseClient';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from '../components/LanguageSelector';
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
 export default function LoginScreen() {
+  const DEMO_MODE = true; 
   const { t, i18n } = useTranslation();
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert(t('error'), t('login_validation_fields'));
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    } catch (error: any) {
-      Alert.alert(t('login_failed_title'), error.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  if (!email || !password) {
+    Alert.alert(t('error'), t('login_validation_fields'));
+    return;
+  }
+  setIsLoading(true);
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
 
+    const user = data.user;
+    if (user) {
+      // keep the DB in sync with the current i18n language
+      await supabase.from('users').upsert(
+        {
+          user_id: user.id,
+          email: user.email,
+          language_code: i18n.language,
+        },
+        { onConflict: 'user_id' }
+      );
+
+      // Navigate to Home like in the original code
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
+    }
+  } catch (err: any) {
+    Alert.alert(t('login_failed_title'), err.message);
+  } finally {
+    setIsLoading(false);
+  }
+};
   async function signInWithGoogle() {
     setIsLoading(true);
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -81,14 +102,26 @@ export default function LoginScreen() {
         autoCapitalize="none"
         editable={!isLoading}
       />
-      <TextInput
-        style={styles.input}
-        placeholder={t('password_placeholder')}
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        editable={!isLoading}
-      />
+      <View style={styles.passwordContainer}>
+        <TextInput
+          style={styles.passwordInput}
+          placeholder={t('password_placeholder')}
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!DEMO_MODE && !isPasswordVisible}
+          editable={!isLoading}
+        />
+        <TouchableOpacity
+          style={styles.eyeIcon}
+          onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+        >
+          <Ionicons
+            name={isPasswordVisible ? 'eye-off' : 'eye'}
+            size={24}
+            color="#6c757d"
+          />
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity onPress={handlePasswordReset} disabled={isLoading}>
         <Text style={styles.forgotPasswordText}>{t('forgot_password')}</Text>
@@ -148,6 +181,24 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#fff',
     fontSize: 16,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderColor: '#ced4da',
+    borderWidth: 1,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    marginBottom: 15,
+  },
+  passwordInput: {
+    flex: 1,
+    height: 50,
+    paddingHorizontal: 15,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    padding: 10,
   },
   buttonWrapper: {
     marginVertical: 6,

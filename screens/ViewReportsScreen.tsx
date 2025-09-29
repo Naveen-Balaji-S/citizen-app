@@ -1,238 +1,321 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { 
-    View, Text, StyleSheet, FlatList, Image, 
-    ActivityIndicator, Alert, SafeAreaView, RefreshControl 
+import { useTranslation } from 'react-i18next';
+import {
+  View, Text, StyleSheet, FlatList, Image,
+  ActivityIndicator, Alert, RefreshControl,
+  TextInput, Modal, Button, TouchableOpacity,
+  LayoutAnimation, Platform, UIManager
 } from 'react-native';
 import { supabase } from '../lib/supabaseClient';
 import { useFocusEffect } from '@react-navigation/native';
-import { useTranslation } from 'react-i18next'; // 👈 MODIFIED: Import useTranslation
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Picker } from '@react-native-picker/picker';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MapView, { Marker, UrlTile } from 'react-native-maps';
 
-// This is the TypeScript type for a single report object from your database
-interface Report {
-    report_id: number;
-    description: string;
-    image_url: string;
-    status: string;
-    created_at: string;
-    department: { name: string } | null;
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// Map status to badge background and text color
-// This function now accepts the 't' function as an argument
-const getStatusColors = (status: string, t: any) => {
-    switch (status) {
-        case t('status_submitted'):
-            return { bg: '#cce5ff', text: '#004085' };
-        case t('status_acknowledged'):
-            return { bg: '#fff3cd', text: '#856404' };
-        case t('status_completed'):
-            return { bg: '#d4edda', text: '#155724' };
-        default:
-            return { bg: '#e2e3e5', text: '#6c757d' };
-    }
+interface Report {
+  report_id: number;
+  description: string;
+  image_url: string;
+  status: string;
+  created_at: string;
+  upvote_count: number;
+  latitude: number;
+  longitude: number;
+  department: { name: string } | null;
+}
+
+const getStatusColors = (status: string) => {
+  switch (status) {
+    case 'Submitted': return { bg: '#e0f7fa', text: '#007bff' };
+    case 'Acknowledged': return { bg: '#fff3cd', text: '#ffc107' };
+    case 'Completed': return { bg: '#d4edda', text: '#28a745' };
+    default: return { bg: '#e9ecef', text: '#6c757d' };
+  }
 };
 
-// This is a small component to render one report item in the list
-const ReportItem = ({ item }: { item: Report }) => {
-    const { t } = useTranslation(); // 👈 MODIFIED: Use the hook
-    const statusTranslated = t('status_' + item.status.toLowerCase());
-    const colors = getStatusColors(statusTranslated, t); // 👈 MODIFIED: Pass 't' to the function
+const MyReportListItem = ({ item }: { item: Report }) => {
+  const { t } = useTranslation();
+  const [isExpanded, setIsExpanded] = useState(false);
 
-    return (
-        <View style={styles.itemContainer}>
-            <Image 
-                source={{ uri: item.image_url }} 
-                style={styles.image} 
-                onError={() => console.log('Failed to load image:', item.image_url)} 
-            />
-            <View style={styles.textContainer}>
-                <Text style={styles.department}>{item.department?.name || 'N/A'}</Text>
-                <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
-                <View style={styles.statusContainer}>
-                    <Text style={styles.statusLabel}>{t('status_label')}</Text> {/* 👈 MODIFIED: Translated */}
-                    <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
-                        <Text style={[styles.statusText, { color: colors.text }]}>
-                            {statusTranslated}
-                        </Text>
-                    </View>
-                </View>
-                <Text style={styles.date}>
-                    {t('reported_on')}: {new Date(item.created_at).toLocaleDateString()} {/* 👈 MODIFIED: Translated */}
-                </Text>
-            </View>
+  const toggleExpand = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsExpanded(!isExpanded);
+  };
+
+  const colors = getStatusColors(item.status);
+  const statusKey = `status_${item.status.toLowerCase()}` as const;
+
+  return (
+    <View style={styles.itemOuterContainer}>
+      <TouchableOpacity style={styles.itemContainer} onPress={toggleExpand} activeOpacity={0.8}>
+        <Image source={{ uri: item.image_url }} style={styles.itemImage} />
+        <View style={styles.itemContent}>
+          <Text style={styles.itemDepartment}>{item.department?.name || t('general_department')}</Text>
+          <Text style={styles.descriptionText} numberOfLines={2}>{item.description}</Text>
         </View>
-    );
+        <View style={styles.upvoteSection}>
+          <Text style={styles.upvoteEmoji}>👍</Text>
+          <Text style={styles.upvoteCountText}>{item.upvote_count}</Text>
+        </View>
+        <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={24} color="#6c757d" />
+      </TouchableOpacity>
+
+      {isExpanded && (
+        <View style={styles.expandedView}>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailKey}>{t('status_label')}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
+              <Text style={[styles.statusText, { color: colors.text }]}>{t(statusKey)}</Text>
+            </View>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailKey}>{t('reported_on')}</Text>
+            <Text style={styles.detailValue}>{new Date(item.created_at).toLocaleString()}</Text>
+          </View>
+          <Text style={styles.fullDescription}>{item.description}</Text>
+          <View style={styles.miniMapContainer}>
+            <MapView
+              style={styles.miniMap}
+              scrollEnabled={false}
+              zoomEnabled={false}
+              initialRegion={{
+                latitude: item.latitude,
+                longitude: item.longitude,
+                latitudeDelta: 0.005,
+                longitudeDelta: 0.005
+              }}
+            >
+              <UrlTile urlTemplate={`https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${process.env.EXPO_PUBLIC_MAPTILER_API_KEY}`} maximumZ={19} />
+              <Marker coordinate={{ latitude: item.latitude, longitude: item.longitude }} />
+            </MapView>
+          </View>
+        </View>
+      )}
+    </View>
+  );
 };
 
 export default function ViewReportsScreen() {
-    const { t } = useTranslation(); // 👈 MODIFIED: Use the hook
-    const [reports, setReports] = useState<Report[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
+  const { t } = useTranslation();
+  const [reports, setReports] = useState<Report[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-    const fetchReports = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("User not found.");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [departments, setDepartments] = useState<{ id: number; name: string }[]>([]);
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [sortBy, setSortBy] = useState<'created_at' | 'upvote_count'>('created_at');
 
-            const { data, error: fetchError } = await supabase
-                .from('reports')
-                .select(`
-                    report_id,
-                    description,
-                    image_url,
-                    status,
-                    created_at,
-                    department:departments(name) 
-                `)
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: false });
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+  const [selectedDateRange, setSelectedDateRange] = useState<string | null>(null);
 
-            if (fetchError) throw fetchError;
-            
-            const reportsData = (data || []).map(report => {
-                const department = (report as any).department;
-                let departmentObject = null;
+  const fetchReports = useCallback(async () => {
+    if (!reports.length && !refreshing) setIsLoading(true);
+    else if (!refreshing) setRefreshing(true);
 
-                if (department && Array.isArray(department) && department.length > 0) {
-                    departmentObject = department[0];
-                } else if (department) {
-                    departmentObject = department;
-                }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not found.");
 
-                // Make sure the status is one of the known translated keys before saving to state
-                const translatedStatus = t(`status_${report.status.toLowerCase()}` as any);
-                const finalStatus = translatedStatus.startsWith('status_') ? t('status_unknown') : translatedStatus;
+      let query = supabase
+        .from('reports')
+        .select(`report_id, description, image_url, status, created_at, upvote_count, latitude, longitude, department:departments(name)`)
+        .eq('user_id', user.id);
 
-                return {
-                    ...report,
-                    status: finalStatus, // 👈 MODIFIED: Store translated status
-                    department: departmentObject || { name: 'Unknown' },
-                };
-            });
+      if (searchQuery) query = query.ilike('description', `%${searchQuery}%`);
+      if (selectedStatus) query = query.eq('status', selectedStatus);
+      if (selectedDeptId) query = query.eq('department_id', selectedDeptId);
+      if (selectedDateRange) {
+        const now = new Date();
+        const startDate = new Date();
+        if (selectedDateRange === 'week') startDate.setDate(now.getDate() - 7);
+        else if (selectedDateRange === 'month') startDate.setMonth(now.getMonth() - 1);
+        query = query.gte('created_at', startDate.toISOString());
+      }
 
-            setReports(reportsData);
+      query = query.order(sortBy, { ascending: false });
 
-        } catch (err: any) {
-            Alert.alert(t('error'), t('fetch_reports_error')); // 👈 MODIFIED: Translated alert
-        } finally {
-            setIsLoading(false);
-            setRefreshing(false);
-        }
-    };
+      const { data, error: fetchError } = await query;
 
-    useFocusEffect(
-        useCallback(() => {
-            fetchReports(); // Initial fetch
+      if (fetchError) throw fetchError;
 
-            const channel = supabase
-                .channel('public:reports')
-                .on(
-                    'postgres_changes',
-                    { event: '*', schema: 'public', table: 'reports' },
-                    (payload) => {
-                        console.log('Change received!', payload);
-                        fetchReports();
-                    }
-                )
-                .subscribe();
+      const reportsData = (data || []).map(report => {
+        const department = (report as any).department;
+        return {
+          ...report,
+          department: department && Array.isArray(department) ? department[0] : department,
+        };
+      });
 
-            return () => {
-                supabase.removeChannel(channel);
-            };
-        }, [])
-    );
+      setReports(reportsData);
 
-    const onRefresh = () => {
-        setRefreshing(true);
-        fetchReports();
-    };
-
-    if (isLoading) {
-        return (
-            <View style={[styles.container, styles.center]}>
-                <ActivityIndicator size="large" color="#007bff" />
-                <Text style={styles.loadingText}>{t('loading_reports')}</Text> {/* 👈 MODIFIED: Translated */}
-            </View>
-        );
+    } catch (err: any) {
+      Alert.alert(t('error'), t('fetch_reports_error'));
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
     }
-    
+  }, [searchQuery, selectedStatus, selectedDeptId, selectedDateRange, sortBy, t]);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      const { data } = await supabase.from('departments').select('id, name');
+      setDepartments(data || []);
+    };
+    loadDepartments();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchReports();
+
+      const channel = supabase
+        .channel('public:reports-user-specific')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'reports' },
+          () => fetchReports()
+        )
+        .subscribe();
+
+      return () => supabase.removeChannel(channel);
+    }, [fetchReports])
+  );
+
+  const onRefresh = () => { setRefreshing(true); fetchReports(); };
+  const clearFilters = () => {
+    setSelectedStatus(null);
+    setSelectedDeptId(null);
+    setSelectedDateRange(null);
+    setSearchQuery('');
+    setFilterModalVisible(false);
+  };
+  const applyFiltersAndCloseModal = () => { fetchReports(); setFilterModalVisible(false); };
+
+  if (isLoading) {
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <View style={styles.container}>
-                <Text style={styles.title}>{t('view_reports_title')}</Text> {/* 👈 MODIFIED: Translated */}
-                <FlatList
-                    data={reports}
-                    renderItem={({ item }) => <ReportItem item={item} />}
-                    keyExtractor={(item, index) => item.report_id?.toString() || index.toString()}
-                    contentContainerStyle={{ paddingBottom: 20 }}
-                    ListEmptyComponent={
-                        <View style={styles.center}>
-                            <Text style={styles.emptyText}>{t('no_reports_yet')}</Text> {/* 👈 MODIFIED: Translated */}
-                        </View>
-                    }
-                    refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#007bff"]} />
-                    }
-                />
-            </View>
-        </SafeAreaView>
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color="#007bff" />
+        <Text style={styles.loadingText}>{t('loading_reports')}</Text>
+      </View>
     );
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        <Text style={styles.title}>{t('view_reports_title')}</Text>
+
+        <View style={styles.controlsContainer}>
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder={t('search_by_description_placeholder')}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onSubmitEditing={fetchReports}
+            />
+            <TouchableOpacity style={styles.searchButton} onPress={fetchReports}>
+              <Ionicons name="search" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.filterButtonIcon} onPress={() => setFilterModalVisible(true)}>
+            <Ionicons name="filter" size={24} color="#007bff" />
+          </TouchableOpacity>
+        </View>
+
+        <FlatList
+          data={reports}
+          renderItem={({ item }) => <MyReportListItem item={item} />}
+          keyExtractor={(item) => item.report_id.toString()}
+          contentContainerStyle={{ paddingBottom: 20 }}
+          ListEmptyComponent={<View style={styles.center}><Text style={styles.emptyText}>{t('no_reports_yet')}</Text></View>}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#007bff"]} />}
+        />
+      </View>
+
+      <Modal animationType="slide" transparent visible={filterModalVisible} onRequestClose={() => setFilterModalVisible(false)}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t('filter_reports_title')}</Text>
+
+            <Text style={styles.filterLabel}>{t('status_label').replace(':', '')}</Text>
+            <Picker selectedValue={selectedStatus} onValueChange={setSelectedStatus}>
+              <Picker.Item label={t('all_status')} value={null} />
+              <Picker.Item label={t('status_submitted')} value="Submitted" />
+              <Picker.Item label={t('status_acknowledged')} value="Acknowledged" />
+              <Picker.Item label={t('status_completed')} value="Completed" />
+            </Picker>
+
+            <Text style={styles.filterLabel}>{t('department_label')}</Text>
+            <Picker selectedValue={selectedDeptId} onValueChange={setSelectedDeptId}>
+              <Picker.Item label={t('all_departments')} value={null} />
+              {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+            </Picker>
+
+            <Text style={styles.filterLabel}>{t('date_range_label')}</Text>
+            <Picker selectedValue={selectedDateRange} onValueChange={setSelectedDateRange}>
+              <Picker.Item label={t('all_time')} value={null} />
+              <Picker.Item label={t('this_week')} value="week" />
+              <Picker.Item label={t('this_month')} value="month" />
+            </Picker>
+
+            <Text style={styles.filterLabel}>{t('sort_by_label')}</Text>
+            <Picker selectedValue={sortBy} onValueChange={(itemValue: 'created_at' | 'upvote_count') => setSortBy(itemValue)}>
+              <Picker.Item label={t('newest_first')} value="created_at" />
+              <Picker.Item label={t('most_upvoted')} value="upvote_count" />
+            </Picker>
+
+            <View style={styles.modalButtonContainer}>
+              <Button title={t('clear_filters_button')} onPress={clearFilters} color="#6c757d" />
+              <Button title={t('apply_button')} onPress={applyFiltersAndCloseModal} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
 }
 
-// --- STYLES ---
 const styles = StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: '#f0f2f5' },
-    container: { flex: 1, padding: 15, },
-    center: { justifyContent: 'center', alignItems: 'center', flex: 1 },
-    title: {
-        fontSize: 26,
-        fontWeight: 'bold',
-        color: '#1c1c1e',
-        marginBottom: 20,
-    },
-    itemContainer: { 
-        flexDirection: 'row', 
-        backgroundColor: '#fff', 
-        padding: 15, 
-        marginVertical: 8, 
-        borderRadius: 12, 
-        elevation: 3, 
-        shadowColor: '#000', 
-        shadowOffset: { width: 0, height: 2 }, 
-        shadowOpacity: 0.1, 
-        shadowRadius: 4,
-    },
-    image: { 
-        width: 80, 
-        height: 80, 
-        borderRadius: 8, 
-        marginRight: 15, 
-        backgroundColor: '#e9ecef' 
-    },
-    textContainer: { flex: 1, justifyContent: 'center' },
-    department: { fontSize: 18, fontWeight: 'bold', color: '#343a40' },
-    description: { fontSize: 14, color: '#6c757d', marginVertical: 4, },
-    statusContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 4,
-    },
-    statusLabel: {
-        fontSize: 14,
-        color: '#6c757d',
-        marginRight: 5,
-    },
-    statusBadge: {
-        borderRadius: 12,
-        paddingVertical: 3,
-        paddingHorizontal: 8,
-    },
-    statusText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    date: { fontSize: 12, color: '#6c757d', marginTop: 8 },
-    loadingText: { marginTop: 10, fontSize: 16, color: '#6c757d' },
-    emptyText: { fontSize: 16, color: '#6c757d' },
+  safeArea: { flex: 1, backgroundColor: '#f0f2f5' },
+  container: { flex: 1, padding: 15 },
+  center: { justifyContent: 'center', alignItems: 'center', flex: 1 },
+  title: { fontSize: 26, fontWeight: 'bold', color: '#1c1c1e', marginBottom: 20 },
+  loadingText: { marginTop: 10, fontSize: 16, color: '#6c757d' },
+  controlsContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, height: 44, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05 },
+  searchInput: { flex: 1, fontSize: 16, paddingHorizontal: 15 },
+  searchButton: { padding: 10, backgroundColor: '#007bff', height: '100%', justifyContent: 'center', borderTopRightRadius: 10, borderBottomRightRadius: 10 },
+  filterButtonIcon: { marginLeft: 10, padding: 8 },
+  modalContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalContent: { backgroundColor: '#f8f9fa', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 25, paddingBottom: 40 },
+  modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  filterLabel: { fontSize: 16, fontWeight: '600', color: '#495057', marginTop: 10 },
+  modalButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 30 },
+  itemOuterContainer: { backgroundColor: '#fff', borderRadius: 12, marginBottom: 12, marginHorizontal: 15, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } },
+  itemContainer: { paddingVertical: 12, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center' },
+  itemImage: { width: 60, height: 60, borderRadius: 8, marginRight: 15, backgroundColor: '#e9ecef' },
+  itemContent: { flex: 1 },
+  itemDepartment: { fontSize: 13, fontWeight: 'bold', color: '#007bff', marginBottom: 4 },
+  descriptionText: { fontSize: 16, color: '#343a40', flexShrink: 1 },
+  upvoteSection: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#e9ecef', borderRadius: 20, paddingVertical: 6, paddingHorizontal: 10, marginLeft: 10 },
+  upvoteEmoji: { fontSize: 16 },
+  upvoteCountText: { fontSize: 16, color: '#343a40', fontWeight: 'bold', marginLeft: 5 },
+  expandedView: { paddingHorizontal: 15, paddingBottom: 15, borderTopWidth: 1, borderTopColor: '#e9ecef' },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
+  detailKey: { fontSize: 14, color: '#6c757d', fontWeight: '600' },
+  detailValue: { fontSize: 14, color: '#343a40', fontWeight: '500' },
+  statusBadge: { borderRadius: 12, paddingVertical: 3, paddingHorizontal: 8 },
+  statusText: { fontSize: 12, fontWeight: '600' },
+  fullDescription: { fontSize: 15, color: '#343a40', marginTop: 15, lineHeight: 22 },
+  miniMapContainer: { height: 180, borderRadius: 8, overflow: 'hidden', marginTop: 15, backgroundColor: '#e9ecef' },
+  miniMap: { ...StyleSheet.absoluteFillObject },
+  emptyText: { fontSize: 16, color: '#6c757d' },
 });

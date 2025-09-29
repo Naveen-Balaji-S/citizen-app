@@ -1,49 +1,60 @@
+// screens/HomeScreen.tsx
 import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  FlatList,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { supabase } from '../lib/supabaseClient';
 import { User } from '@supabase/supabase-js';
-import * as Notifications from 'expo-notifications';
-import { showError } from '../lib/notification';
-import usePushTokens from '../hooks/usePushToken';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Location from 'expo-location';
 import MapView, { Marker, Circle } from 'react-native-maps';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
+import { showError } from '../lib/notification';
+import usePushTokens from '../hooks/usePushToken';
 
-type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
+type HomeScreenNavProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
 export default function HomeScreen() {
+  const navigation = useNavigation<HomeScreenNavProp>();
   const { t } = useTranslation();
-  const navigation = useNavigation<HomeScreenNavigationProp>();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [civicPoints, setCivicPoints] = useState(0);
-  const isFocused = useIsFocused();
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [nearbyReports, setNearbyReports] = useState<any[]>([]);
+  const [draftCount, setDraftCount] = useState(0);
+  const [isOffline, setIsOffline] = useState(false);
+  const isFocused = useIsFocused();
   const expoPushToken = usePushTokens();
+
+  useEffect(() => {
+    if (isFocused) fetchDraftCount();
+  }, [isFocused, user]);
 
   useEffect(() => {
     const fetchDataOnFocus = async () => {
       if (!user) return;
-      // Fetch unread count
+
+      // Fetch unread notifications count
       const { count } = await supabase
         .from('user_notifications')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('is_read', false);
+
       if (count !== null) setUnreadCount(count);
 
       // Fetch civic points
@@ -52,21 +63,26 @@ export default function HomeScreen() {
         .select('civic_points')
         .eq('user_id', user.id)
         .single();
+
       if (!error && userData) setCivicPoints(userData.civic_points);
     };
-    if (isFocused) fetchDataOnFocus();
+
+    if (isFocused) {
+      fetchDataOnFocus();
+      fetchDraftCount();
+    }
   }, [isFocused, user]);
 
   useEffect(() => {
     const fetchLocationAndReports = async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(t('permission_required_title'), t('location_permission_message'));
         setLoading(false);
         return;
       }
 
-      let location = await Location.getCurrentPositionAsync({});
+      const location = await Location.getCurrentPositionAsync({});
       setUserLocation(location);
 
       const { data, error } = await supabase.functions.invoke('get-nearby-reports', {
@@ -83,16 +99,27 @@ export default function HomeScreen() {
       }
     };
 
-    if (isFocused) {
-      fetchLocationAndReports();
+    if (isFocused) fetchLocationAndReports();
+  }, [isFocused, t]);
+
+  const fetchDraftCount = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const draftKeys = keys.filter(key => key.startsWith('@draft_report_'));
+      setDraftCount(draftKeys.length);
+    } catch (e) {
+      console.error('Error fetching draft count:', e);
     }
-  }, [isFocused]);
+  };
 
   useEffect(() => {
     const init = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (!session) { setLoading(false); return; }
+        if (!session) {
+          setLoading(false);
+          return;
+        }
         setUser(session.user);
       } catch (err) {
         showError(err);
@@ -101,6 +128,13 @@ export default function HomeScreen() {
       }
     };
     init();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      setIsOffline(!state.isConnected);
+    });
+    return () => unsubscribe();
   }, []);
 
   const handleLogout = async () => {
@@ -123,26 +157,75 @@ export default function HomeScreen() {
     );
   }
 
+  const actionCards = [
+    { title: t('file_new_report'), icon: 'document-text-outline', onPress: () => navigation.navigate('ReportForm', { draft: undefined }) },
+    { title: t('my_reports_card'), icon: 'folder-outline', onPress: () => navigation.navigate('ViewReports') },
+    { title: t('community_reports_card'), icon: 'people-outline', onPress: () => navigation.navigate('CommunityReports') },
+    { title: t('leaderboard_card'), icon: 'trophy-outline', onPress: () => navigation.navigate('Leaderboard') },
+    { title: t('drafts_card'), icon: 'clipboard-outline', onPress: () => navigation.navigate('Drafts'), badge: draftCount },
+  ];
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.welcomeTitle}>{t('dashboard_title')}</Text>
-            <Text style={styles.pointsText}>🏆 {t('civic_points_label', { points: civicPoints })}</Text>
+            <Text style={styles.pointsText}>
+              🏆 {t('civic_points_label', { points: civicPoints })}
+            </Text>
           </View>
 
           <View style={styles.iconRow}>
-            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Notifications')}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => navigation.navigate('Notifications')}
+            >
               <Ionicons name="notifications-outline" size={26} color="#1c1c1e" />
-              {unreadCount > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text></View>}
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} onPress={() => user && Alert.alert(t('logged_in_as'), user.email!)}>
+
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => user && Alert.alert(t('logged_in_as'), user.email!)}
+            >
               <Ionicons name="person-circle-outline" size={30} color="#1c1c1e" />
             </TouchableOpacity>
           </View>
         </View>
 
+        {/* Horizontal Action Cards */}
+        <View style={{ marginBottom: 15 }}>
+          <FlatList
+            data={actionCards}
+            horizontal
+            keyExtractor={(item, index) => `${item.title}-${index}`}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 5, paddingBottom: 10 }}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={[styles.card, { height: 90 }]} onPress={item.onPress}>
+                <View>
+                  <Ionicons name={item.icon as any} size={28} color="#007bff" />
+                  {item.badge && item.badge > 0 && (
+                    <View style={styles.draftBadge}>
+                      <Text style={styles.badgeText}>{item.badge}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.cardTitle}>{item.title}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+
+        {/* Map */}
         <View style={styles.mapContainer}>
           {userLocation ? (
             <MapView
@@ -153,7 +236,7 @@ export default function HomeScreen() {
                 latitudeDelta: 0.015,
                 longitudeDelta: 0.015,
               }}
-              showsUserLocation={true}
+              showsUserLocation
             >
               <Marker
                 coordinate={{
@@ -170,14 +253,14 @@ export default function HomeScreen() {
                 strokeWidth={2}
                 fillColor="rgba(0, 123, 255, 0.1)"
               />
-              {nearbyReports.map((report) => (
+              {nearbyReports.map(report => (
                 <Marker
                   key={report.report_id}
                   coordinate={{
                     latitude: report.latitude,
                     longitude: report.longitude,
                   }}
-                  title={report.description}
+                  title={report.description || ''}
                   pinColor="#dc3545"
                 />
               ))}
@@ -187,21 +270,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <View style={styles.cardContainer}>
-          <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('ReportForm')}>
-            <Text style={styles.cardIcon}>📝</Text><Text style={styles.cardTitle}>{t('file_new_report')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('ViewReports')}>
-            <Text style={styles.cardIcon}>📂</Text><Text style={styles.cardTitle}>{t('my_reports_card')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('CommunityReports')}>
-            <Text style={styles.cardIcon}>👥</Text><Text style={styles.cardTitle}>{t('community_reports_card')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('Leaderboard')}>
-            <Text style={styles.cardIcon}>🏆</Text><Text style={styles.cardTitle}>{t('leaderboard_card')}</Text>
-          </TouchableOpacity>
-        </View>
-
+        {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>{t('logout_button')}</Text>
         </TouchableOpacity>
@@ -215,19 +284,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 20 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   welcomeTitle: { fontSize: 28, fontWeight: 'bold', color: '#1c1c1e' },
-  welcomeSubtitle: { fontSize: 16, color: '#6c757d' },
   pointsText: { fontSize: 16, fontWeight: '600', color: '#007bff', marginTop: 4 },
   iconRow: { flexDirection: 'row', alignItems: 'center' },
   iconButton: { marginLeft: 16 },
   badge: { position: 'absolute', top: -4, right: -4, backgroundColor: 'red', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
   badgeText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  mapContainer: { flex: 0.7, backgroundColor: '#e9ecef', justifyContent: 'center', alignItems: 'center', borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#dee2e6', overflow: 'hidden' },
+  mapContainer: { flex: 1, backgroundColor: '#e9ecef', justifyContent: 'center', alignItems: 'center', borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#dee2e6', overflow: 'hidden' },
   map: { ...StyleSheet.absoluteFillObject },
   mapText: { color: '#6c757d', fontSize: 16 },
-  cardContainer: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  card: { backgroundColor: '#ffffff', paddingVertical: 20, paddingHorizontal: 10, borderRadius: 12, alignItems: 'center', justifyContent: 'center', width: '48%', marginBottom: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3.84, elevation: 5 },
-  cardIcon: { fontSize: 32, marginBottom: 10 },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', textAlign: 'center', color: '#343a40' },
-  logoutButton: { backgroundColor: '#dc3545', paddingVertical: 15, borderRadius: 12, alignItems: 'center', marginTop: 'auto' },
+  card: { backgroundColor: '#ffffff', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', width: 120, marginRight: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3.84, elevation: 5 },
+  cardTitle: { fontSize: 12, fontWeight: 'bold', textAlign: 'center', color: '#343a40', lineHeight: 14, marginTop: 5 },
+  logoutButton: { backgroundColor: '#dc3545', paddingVertical: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   logoutButtonText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  draftBadge: { position: 'absolute', top: -5, right: -10, backgroundColor: '#ffc107', borderRadius: 12, minWidth: 24, height: 24, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
 });
